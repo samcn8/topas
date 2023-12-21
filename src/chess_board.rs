@@ -85,8 +85,8 @@ pub struct ChessBoard {
     pub black_qs_castling_rights: bool,
 
     // Whether white / black has castled before
-    white_castled: bool,
-    black_castled: bool,
+    pub white_castled: bool,
+    pub black_castled: bool,
 
     // If not None, this indicates the active en passant square.
     // This is the square the opposing pawn just moved through on a two-row

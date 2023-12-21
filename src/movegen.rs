@@ -106,17 +106,16 @@ fn get_opponents_captured_piece(opp_bbs: &Vec<u64>, capture_square: usize, is_en
     panic!("Invalid bitboard; cannot find opponents captured piece");
 }
 
-// Generate all psuedo-legal moves.
+// Generate all psuedo-legal moves for a given color.
 // A psuedo-legal move is an otherwise legal move that has not yet been
 // checked to determine if it leaves the player's king in check.
-pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard) -> Vec<ChessMove> {
+pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color: usize) -> Vec<ChessMove> {
     
     let mut capture_moves = Vec::new();
     let mut quiet_moves = Vec::new();
 
     // Get colors
-    let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
-    let opp_color = if board.whites_turn {pieces::COLOR_BLACK} else {pieces::COLOR_WHITE};
+    let opp_color = 1 - my_color;
 
     // Create the en passant bitboard, which will be 0 if no en passant
     // rights exist
@@ -222,23 +221,22 @@ fn is_square_attacked_by_side(board: &chess_board::ChessBoard, square: usize, by
     false
 }
 
+// Check whether or not the king of the passed in color is in check
+pub fn is_king_in_check(board: &chess_board::ChessBoard, king_color: usize) -> bool {
+    let king_square = match bitboard::bit_scan_forward(board.bb_pieces[king_color][pieces::KING]) {
+        Some(e) => e,
+        None => panic!("Cannot find king on bitboard"),
+    };
+    is_square_attacked_by_side(&board, king_square, 1 - king_color)
+}
+
+// Modify the passed in moves vector to keep only moves that don't leave
+// player's king in check.
 fn retain_only_legal_moves(board: &mut chess_board::ChessBoard, moves: &mut Vec<ChessMove>) {
-
-    // Get colors
     let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
-    let opp_color = if board.whites_turn {pieces::COLOR_BLACK} else {pieces::COLOR_WHITE};
-
-    // Retain only legal moves
     moves.retain(|i| {
-        let mut keepit = false;
         board.make_move(i.start_square, i.end_square);
-        let king_square = match bitboard::bit_scan_forward(board.bb_pieces[my_color][pieces::KING]) {
-            Some(e) => e,
-            None => panic!("Cannot find king on bitboard"),
-        };
-        if !is_square_attacked_by_side(&board, king_square, opp_color) {
-            keepit = true;
-        }
+        let keepit = !is_king_in_check(board, my_color);
         board.unmake_move();
         keepit
     });
@@ -260,7 +258,8 @@ mod tests {
             return 1;
         }
         let mut move_count = 0;
-        let mut moves = generate_all_psuedo_legal_moves(&board);
+        let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
+        let mut moves = generate_all_psuedo_legal_moves(&board, my_color);
         retain_only_legal_moves(board, &mut moves);
         for m in moves {
             board.make_move(m.start_square, m.end_square);

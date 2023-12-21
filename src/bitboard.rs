@@ -165,7 +165,6 @@ const fn compute_first_rank_attacks() -> [[u8; 256]; 8] {
     attacks
 }
 pub const BB_FIRST_RANK_ATTACKS: [[u8; 256]; 8] = compute_first_rank_attacks();
-// Bitboards representing attacks of bishops, for fast lookup
 
 // Compute single step bitboard functions
 pub const fn south_one (bb: u64) -> u64 {bb.wrapping_shr(8)}

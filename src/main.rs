@@ -15,8 +15,6 @@ fn main() {
     let mut guess = String::new();
     loop {
         board.print();
-        let moves = movegen::generate_all_psuedo_legal_moves(&board);
-        println!("{:#?}", moves);
         println!("Enter starting square of move or u to undo: ");
         io::stdin()
             .read_line(&mut guess)
