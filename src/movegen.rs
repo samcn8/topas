@@ -22,6 +22,30 @@ pub struct ChessMove {
 
 }
 
+// Converts a standard square position string into a square ID.
+// For instance, "a3" -> 3
+fn convert_square_str_into_id(move_str: &str) -> usize {
+    let file = if let Some(e) = move_str.chars().nth(0) {e} else {panic!("Invalid move string - file")};
+    let file = if let Some(e) = "abcdebgh".find(file) {e as usize} else {panic!("Invalid move string - file")};
+    let rank = if let Some(e) = move_str.chars().nth(1) {e} else {panic!("Invalid move string - rank")};
+    let rank = if let Some(e) = rank.to_digit(10) {e as usize} else {panic!("Invalid move string - rank")};
+    rank * 8 + file
+}
+
+// Converts a UCI-style move list (long algebraic notation without
+// piece names) into a vector of (start square, end square) tuples.
+pub fn convert_moves_str_into_list(move_str: &str) -> Vec<(usize, usize)> {
+    let mut moves = Vec::new();
+    for m in move_str.split_whitespace() {
+        let start_square = convert_square_str_into_id(&m[0..2]);
+        let end_square = convert_square_str_into_id(&m[2..4]);
+        // TODO - handle a potential 5th character indicating a promoted
+        //        piece type; right now, this assumes a queen
+        moves.push((start_square, end_square));
+    }
+    moves
+}
+
 // Get any pawn push moves for a color from a starting location.
 fn get_pawn_push_targets_bb(color: usize, empty: u64, square: usize) -> u64 {
     let pawn_bb = bitboard::to_bb(square);
@@ -66,31 +90,31 @@ fn get_castling_king_targets_bb(board: &chess_board::ChessBoard, color: usize, o
 // Get all diagonal attacks (bottom left to top right) from a starting
 // location.
 fn get_diagonal_attacks_bb(occ: u64, square: usize) -> u64 {
-    let tmp_occ = (bitboard::BB_DIAGONAL_MASK[square] & occ).wrapping_mul(bitboard::BB_AFILE).wrapping_shr(56);
-    bitboard::BB_DIAGONAL_MASK[square] & bitboard::BB_AFILE.wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64)
+    let tmp_occ = (bitboard::BB_DIAGONAL_MASK[square] & occ).wrapping_mul(bitboard::BB_FILES[0]).wrapping_shr(56);
+    bitboard::BB_DIAGONAL_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64)
 }
 
 // Get all anti-diagonal attacks (top left to bottom right) from a starting
 // location.
 fn get_antidiagonal_attacks_bb(occ: u64, square: usize) -> u64 {
-    let tmp_occ = (bitboard::BB_ANTIDIAGONAL_MASK[square] & occ).wrapping_mul(bitboard::BB_AFILE).wrapping_shr(56);
-    bitboard::BB_ANTIDIAGONAL_MASK[square] & bitboard::BB_AFILE.wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64)
+    let tmp_occ = (bitboard::BB_ANTIDIAGONAL_MASK[square] & occ).wrapping_mul(bitboard::BB_FILES[0]).wrapping_shr(56);
+    bitboard::BB_ANTIDIAGONAL_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64)
 }
 
 // Get all rank attacks from a starting location
 fn get_rank_attacks_bb(occ: u64, square: usize) -> u64 {
-    let tmp_occ = (bitboard::BB_RANK_MASK[square] & occ).wrapping_mul(bitboard::BB_AFILE).wrapping_shr(56);
-    bitboard::BB_RANK_MASK[square] & bitboard::BB_AFILE.wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64)
+    let tmp_occ = (bitboard::BB_RANK_MASK[square] & occ).wrapping_mul(bitboard::BB_FILES[0]).wrapping_shr(56);
+    bitboard::BB_RANK_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64)
 }
 
 // Get all file attacks from a starting location
 fn get_file_attacks_bb(occ: u64, square: usize) -> u64 {
     let tmp_square = square & 7;
-    let mut tmp_occ = bitboard::BB_AFILE & occ.wrapping_shr(tmp_square as u32);
+    let mut tmp_occ = bitboard::BB_FILES[0] & occ.wrapping_shr(tmp_square as u32);
     tmp_occ = bitboard::BB_MAIN_DIAGONAL.wrapping_mul(tmp_occ).wrapping_shr(56);
     let index = (square ^ 56).wrapping_shr(3);
     tmp_occ = bitboard::BB_MAIN_DIAGONAL.wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[index][tmp_occ as usize] as u64);
-    (bitboard::BB_HFILE & tmp_occ).wrapping_shr((tmp_square ^ 7) as u32)
+    (bitboard::BB_FILES[7] & tmp_occ).wrapping_shr((tmp_square ^ 7) as u32)
 }
 
 // Determine the opponent's piece that is being captured
@@ -232,7 +256,7 @@ pub fn is_king_in_check(board: &chess_board::ChessBoard, king_color: usize) -> b
 
 // Modify the passed in moves vector to keep only moves that don't leave
 // player's king in check.
-fn retain_only_legal_moves(board: &mut chess_board::ChessBoard, moves: &mut Vec<ChessMove>) {
+pub fn retain_only_legal_moves(board: &mut chess_board::ChessBoard, moves: &mut Vec<ChessMove>) {
     let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
     moves.retain(|i| {
         board.make_move(i.start_square, i.end_square);

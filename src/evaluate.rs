@@ -1,13 +1,13 @@
 //! This module contains functions related to game state evaluation.
 
-use crate::{chess_board, bitboard, pieces::{self, COLOR_WHITE}, movegen};
+use crate::{chess_board, bitboard, pieces, movegen};
 
 // Bonuses and penalities, in centipawns, for various situations
 const TEMPO_BONUS: i32 = 28;
 const BISHOP_PAIR_BONUS: i32 = 25;
-const MOBILITY_BONUS_MULTIPLIER: i32 = 10;
-const ISOLATED_PAWN_PENALTY_MULTIPLIER: i32 = 50;
-const DOUBLE_PAWN_PENALTY_MULTIPLIER: i32 = 50;
+const MOBILITY_BONUS: i32 = 10;
+const ISOLATED_PAWN_PENALTY: i32 = 50;
+const DOUBLE_PAWN_PENALTY: i32 = 50;
 const NO_CASTLING_RIGHTS_PENALTY: i32 = 50;
 
 // Check if the current Zobrist hash has been repeated twice before.
@@ -119,12 +119,33 @@ pub fn static_evaluation_phase(board: &chess_board::ChessBoard, is_end_game: boo
     // Mobility bonus, giving a bonus for every psuedo-legal move possible.
     // Note that we do not validate these moves in order to keep this function
     // as fast as possible.
-    totals[pieces::COLOR_WHITE] += MOBILITY_BONUS_MULTIPLIER * movegen::generate_all_psuedo_legal_moves(board, pieces::COLOR_WHITE).len() as i32;
-    totals[pieces::COLOR_BLACK] += MOBILITY_BONUS_MULTIPLIER * movegen::generate_all_psuedo_legal_moves(board, pieces::COLOR_BLACK).len() as i32;
+    totals[pieces::COLOR_WHITE] += MOBILITY_BONUS * movegen::generate_all_psuedo_legal_moves(board, pieces::COLOR_WHITE).len() as i32;
+    totals[pieces::COLOR_BLACK] += MOBILITY_BONUS * movegen::generate_all_psuedo_legal_moves(board, pieces::COLOR_BLACK).len() as i32;
 
-    // TODO Isolated pawn penalty
+    // Pawn structure penalties and bonuses
+    for color in 0..2 {
+        for file in 0..7 {
+            let pawns_in_file = bitboard::pop_count(board.bb_pieces[color][pieces::PAWN] & bitboard::BB_FILES[file]) as i32;
+            let mut neighbor_files_bb: u64 = 0;
+            if file > 0 {
+                neighbor_files_bb |= bitboard::BB_FILES[file-1];
+            }
+            if file < 7 {
+                neighbor_files_bb |= bitboard::BB_FILES[file+1];
+            }
 
-    // TODO Doubled pawn penalty
+            // Isolated pawn penalty
+            if neighbor_files_bb & board.bb_pieces[color][pieces::PAWN] == 0 {
+                totals[color] -= ISOLATED_PAWN_PENALTY * pawns_in_file;
+            }
+
+            // Double pawn penalty
+            if pawns_in_file > 1 {
+                totals[color] -= DOUBLE_PAWN_PENALTY * (pawns_in_file - 1);
+            }
+
+        }
+    }
 
     // Lack of castling rights penalty
     if !board.white_castled && !board.white_ks_castling_rights && !board.white_qs_castling_rights {

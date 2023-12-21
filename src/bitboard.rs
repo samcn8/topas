@@ -50,8 +50,16 @@ pub const BB_BKS_CASTLING_ROOKS_FROM_TO: u64 = 0xa000000000000000;
 pub const BB_BQS_CASTLING_ROOKS_FROM_TO: u64 = 0x0900000000000000;
 
 // Bitboards related to lines, used for move computation
-pub const BB_AFILE: u64 = 0x0101010101010101;
-pub const BB_HFILE: u64 = 0x8080808080808080;
+pub const BB_FILES: [u64; 8] = [
+    0x0101010101010101, // A file
+    0x0202020202020202, // B file
+    0x0404040404040404, // C file
+    0x0808080808080808, // D file
+    0x1010101010101010, // E file
+    0x2020202020202020, // F file
+    0x4040404040404040, // G file
+    0x8080808080808080  // H file
+];
 pub const BB_4RANK: u64 = 0x00000000FF000000;
 pub const BB_5RANK: u64 = 0x000000FF00000000;
 pub const BB_NOT_AFILE: u64 = 0xfefefefefefefefe;
