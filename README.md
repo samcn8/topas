@@ -38,7 +38,7 @@ Note that it is important to build with the `-release` flag, which will signfica
 
 ## Contributing - Not currently accepting pull requests
 
-This is a personal hobby project and something I enjoy tickering with in my free time.  I'm not currently accepting issues or pull requests.  However, you are free to use the code in your own engine development in accordance with the [**GNU General Public License version 3**][license-link] (GPL v3).  Enjoy!
+This is a personal hobby project and something I enjoy tickering with in my free time.  I'm not currently accepting issues or pull requests.  However, you are free to use the code in your own engine development in accordance with the [GNU General Public License version 3](LICENSE) (GPL v3).  Enjoy!
 
 ## Acknowledgements
 
