@@ -133,8 +133,10 @@ pub const BB_ANTIDIAGONAL_MASK: [u64; 64] = compute_antidiagonal_masks();
 
 // First rank attack lookup table.  This is used by Kindergarten bitboards
 // to compute sliding piece attacks.
-// See https://www.chessprogramming.org/First_Rank_Attacks
-const fn compute_first_rank_attacks_for_square(square: u8, occ: u8) -> u8 {
+const FULL_RAY: i32 = 0;
+const WEST_RAY: i32 = 1;
+const EAST_RAY: i32 = 2;
+const fn compute_first_rank_west_attacks_for_square(square: u8, occ: u8) -> u8 {
     let square_bb = 1u8.wrapping_shl(square as u32);
     let mut west_attacks = square_bb - 1;
     let west_blockers = west_attacks & occ;
@@ -143,6 +145,10 @@ const fn compute_first_rank_attacks_for_square(square: u8, occ: u8) -> u8 {
         let west_passed_blocker = west_main_blocker - 1;
         west_attacks ^= west_passed_blocker;
     }
+    west_attacks
+}
+const fn compute_first_rank_east_attacks_for_square(square: u8, occ: u8) -> u8 {
+    let square_bb = 1u8.wrapping_shl(square as u32);
     let mut east_attacks = !square_bb & !(square_bb - 1);
     let east_blockers = east_attacks & occ;
     if let Some(b) = bit_scan_forward(east_blockers as u64) {
@@ -150,15 +156,21 @@ const fn compute_first_rank_attacks_for_square(square: u8, occ: u8) -> u8 {
         let east_passed_blocker = !east_main_blocker & !(east_main_blocker - 1);
         east_attacks ^= east_passed_blocker;
     }
-    west_attacks ^ east_attacks
+    east_attacks
 }
-const fn compute_first_rank_attacks() -> [[u8; 256]; 8] {
+const fn compute_first_rank_attacks(ray: i32) -> [[u8; 256]; 8] {
     let mut attacks: [[u8; 256]; 8] = [[0; 256]; 8];
     let mut square: u8 = 0;
     let mut occ: u8 = 0;
     loop {
         loop {
-            attacks[square as usize][occ as usize] = compute_first_rank_attacks_for_square(square, occ);
+            if ray == FULL_RAY {
+                attacks[square as usize][occ as usize] = compute_first_rank_west_attacks_for_square(square, occ) ^ compute_first_rank_east_attacks_for_square(square, occ);
+            } else if ray == WEST_RAY {
+                attacks[square as usize][occ as usize] = compute_first_rank_west_attacks_for_square(square, occ);
+            } else if ray == EAST_RAY {
+                attacks[square as usize][occ as usize] = compute_first_rank_east_attacks_for_square(square, occ);
+            }
             if occ >= 255 {
                 break;
             }
@@ -172,7 +184,12 @@ const fn compute_first_rank_attacks() -> [[u8; 256]; 8] {
     }
     attacks
 }
-pub const BB_FIRST_RANK_ATTACKS: [[u8; 256]; 8] = compute_first_rank_attacks();
+pub const BB_FIRST_RANK_ATTACKS: [[u8; 256]; 8] = compute_first_rank_attacks(FULL_RAY);
+
+// For SEE capture scoring, it's easier for us to have "east" and "west"
+// first rank attack rays.  So, store these seperately.
+pub const BB_FIRST_RANK_WEST_ATTACKS: [[u8; 256]; 8] = compute_first_rank_attacks(WEST_RAY);
+pub const BB_FIRST_RANK_EAST_ATTACKS: [[u8; 256]; 8] = compute_first_rank_attacks(EAST_RAY);
 
 // Compute single step bitboard functions
 pub const fn south_one (bb: u64) -> u64 {bb.wrapping_shr(8)}

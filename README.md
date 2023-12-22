@@ -4,7 +4,7 @@ Topas Chess is an open source UCI chess engine written in Rust with a focus on c
 
 ## Overview
 
-Topas Chess is a "from scratch" implementation I created as a hobby project with the goal of learning more about chess algorithms and Rust programming in general.  My goal was to create clean, readable code that was well-documeneted, as opposed to an engine that maximized performance.
+Topas Chess is a "from scratch" implementation I created as a hobby project with the goal of learning more about chess algorithms and Rust programming in general.  My goal was to create clean, readable code that was well-documented, as opposed to an engine that maximized performance.
 
 Note that Topas Chess does not contain a GUI; the only way to interact with it is via the Universal Chess Interface (UCI) protocol.
 

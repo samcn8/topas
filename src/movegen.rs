@@ -23,6 +23,9 @@ pub struct ChessMove {
     // Priority of the move, only relavant for search
     pub priority: i32,
 
+    // Whether or not this is an en passant capture
+    pub is_en_passant: bool,
+
 }
 
 // Converts a standard square position string into a square ID.
@@ -92,31 +95,75 @@ fn get_castling_king_targets_bb(board: &chess_board::ChessBoard, color: usize, o
 
 // Get all diagonal attacks (bottom left to top right) from a starting
 // location.
-fn get_diagonal_attacks_bb(occ: u64, square: usize) -> u64 {
+// Portion 0 is the entire ray
+// Portion 1 is the southern part of the ray (mapping west in first rank)
+// Portion 2 is the northern part of the ray (mapping east in first rank)
+pub fn get_diagonal_attacks_bb(occ: u64, square: usize, portion: i32) -> u64 {
     let tmp_occ = (bitboard::BB_DIAGONAL_MASK[square] & occ).wrapping_mul(bitboard::BB_FILES[0]).wrapping_shr(56);
-    bitboard::BB_DIAGONAL_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64)
+    let first_rank_bb;
+    if portion == 1 {
+        first_rank_bb = bitboard::BB_FIRST_RANK_WEST_ATTACKS[square & 7][tmp_occ as usize] as u64
+    } else if portion == 2 {
+        first_rank_bb = bitboard::BB_FIRST_RANK_EAST_ATTACKS[square & 7][tmp_occ as usize] as u64
+    } else {
+        first_rank_bb = bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64
+    }
+    bitboard::BB_DIAGONAL_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(first_rank_bb)
 }
 
 // Get all anti-diagonal attacks (top left to bottom right) from a starting
 // location.
-fn get_antidiagonal_attacks_bb(occ: u64, square: usize) -> u64 {
+// Portion 0 is the entire ray
+// Portion 1 is the northern part of the ray (mapping west in first rank)
+// Portion 2 is the southern part of the ray (mapping east in first rank)
+pub fn get_antidiagonal_attacks_bb(occ: u64, square: usize, portion: i32) -> u64 {
     let tmp_occ = (bitboard::BB_ANTIDIAGONAL_MASK[square] & occ).wrapping_mul(bitboard::BB_FILES[0]).wrapping_shr(56);
-    bitboard::BB_ANTIDIAGONAL_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64)
+    let first_rank_bb;
+    if portion == 1 {
+        first_rank_bb = bitboard::BB_FIRST_RANK_WEST_ATTACKS[square & 7][tmp_occ as usize] as u64
+    } else if portion == 2 {
+        first_rank_bb = bitboard::BB_FIRST_RANK_EAST_ATTACKS[square & 7][tmp_occ as usize] as u64
+    } else {
+        first_rank_bb = bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64
+    }
+    bitboard::BB_ANTIDIAGONAL_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(first_rank_bb)
 }
 
 // Get all rank attacks from a starting location
-fn get_rank_attacks_bb(occ: u64, square: usize) -> u64 {
+// Portion 0 is the entire ray
+// Portion 1 is the western part of the ray (mapping west in first rank)
+// Portion 2 is the eastern part of the ray (mapping east in first rank)
+pub fn get_rank_attacks_bb(occ: u64, square: usize, portion: i32) -> u64 {
     let tmp_occ = (bitboard::BB_RANK_MASK[square] & occ).wrapping_mul(bitboard::BB_FILES[0]).wrapping_shr(56);
-    bitboard::BB_RANK_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64)
+    let first_rank_bb;
+    if portion == 1 {
+        first_rank_bb = bitboard::BB_FIRST_RANK_WEST_ATTACKS[square & 7][tmp_occ as usize] as u64
+    } else if portion == 2 {
+        first_rank_bb = bitboard::BB_FIRST_RANK_EAST_ATTACKS[square & 7][tmp_occ as usize] as u64
+    } else {
+        first_rank_bb = bitboard::BB_FIRST_RANK_ATTACKS[square & 7][tmp_occ as usize] as u64
+    }
+    bitboard::BB_RANK_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(first_rank_bb)
 }
 
 // Get all file attacks from a starting location
-fn get_file_attacks_bb(occ: u64, square: usize) -> u64 {
+// Portion 0 is the entire ray
+// Portion 1 is the northern part of the ray (mapping west in first rank)
+// Portion 2 is the southern part of the ray (mapping east in first rank)
+pub fn get_file_attacks_bb(occ: u64, square: usize, portion: i32) -> u64 {
     let tmp_square = square & 7;
     let mut tmp_occ = bitboard::BB_FILES[0] & occ.wrapping_shr(tmp_square as u32);
     tmp_occ = bitboard::BB_MAIN_DIAGONAL.wrapping_mul(tmp_occ).wrapping_shr(56);
     let index = (square ^ 56).wrapping_shr(3);
-    tmp_occ = bitboard::BB_MAIN_DIAGONAL.wrapping_mul(bitboard::BB_FIRST_RANK_ATTACKS[index][tmp_occ as usize] as u64);
+    let first_rank_bb;
+    if portion == 1 {
+        first_rank_bb = bitboard::BB_FIRST_RANK_WEST_ATTACKS[index][tmp_occ as usize] as u64
+    } else if portion == 2 {
+        first_rank_bb = bitboard::BB_FIRST_RANK_EAST_ATTACKS[index][tmp_occ as usize] as u64
+    } else {
+        first_rank_bb = bitboard::BB_FIRST_RANK_ATTACKS[index][tmp_occ as usize] as u64
+    }
+    tmp_occ = bitboard::BB_MAIN_DIAGONAL.wrapping_mul(first_rank_bb);
     (bitboard::BB_FILES[7] & tmp_occ).wrapping_shr((tmp_square ^ 7) as u32)
 }
 
@@ -171,16 +218,16 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
                 quite_move_bb = bitboard::BB_KNIGHT_ATTACKS[square] & board.bb_empty_squares;
                 capture_move_bb = bitboard::BB_KNIGHT_ATTACKS[square] & board.bb_side[opp_color];
             } else if piece == pieces::BISHOP {
-                let bishop_attacks = get_diagonal_attacks_bb(board.bb_occupied_squares, square) | get_antidiagonal_attacks_bb(board.bb_occupied_squares, square);
+                let bishop_attacks = get_diagonal_attacks_bb(board.bb_occupied_squares, square, 0) | get_antidiagonal_attacks_bb(board.bb_occupied_squares, square, 0);
                 quite_move_bb = bishop_attacks & board.bb_empty_squares;
                 capture_move_bb = bishop_attacks & board.bb_side[opp_color];
             } else if piece == pieces::ROOK {
-                let rook_attacks = get_rank_attacks_bb(board.bb_occupied_squares, square) | get_file_attacks_bb(board.bb_occupied_squares, square);
+                let rook_attacks = get_rank_attacks_bb(board.bb_occupied_squares, square, 0) | get_file_attacks_bb(board.bb_occupied_squares, square, 0);
                 quite_move_bb = rook_attacks & board.bb_empty_squares;
                 capture_move_bb = rook_attacks & board.bb_side[opp_color];
             } else if piece == pieces::QUEEN {
-                let bishop_attacks = get_diagonal_attacks_bb(board.bb_occupied_squares, square) | get_antidiagonal_attacks_bb(board.bb_occupied_squares, square);
-                let rook_attacks = get_rank_attacks_bb(board.bb_occupied_squares, square) | get_file_attacks_bb(board.bb_occupied_squares, square);
+                let bishop_attacks = get_diagonal_attacks_bb(board.bb_occupied_squares, square, 0) | get_antidiagonal_attacks_bb(board.bb_occupied_squares, square, 0);
+                let rook_attacks = get_rank_attacks_bb(board.bb_occupied_squares, square, 0) | get_file_attacks_bb(board.bb_occupied_squares, square, 0);
                 let queen_attacks = bishop_attacks | rook_attacks;
                 quite_move_bb = queen_attacks & board.bb_empty_squares;
                 capture_move_bb = queen_attacks & board.bb_side[opp_color];
@@ -200,6 +247,7 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
                     piece,
                     captured_piece: None,
                     priority: 0,
+                    is_en_passant: false,
                 };
                 quiet_moves.push(cmove);
             }
@@ -214,6 +262,7 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
                     piece,
                     captured_piece: Some(cap),
                     priority: 0,
+                    is_en_passant,
                 };
                 capture_moves.push(cmove);
             }
@@ -242,11 +291,11 @@ fn is_square_attacked_by_side(board: &chess_board::ChessBoard, square: usize, by
         return true;
     }
     let bishops_queens = board.bb_pieces[by_side_color][pieces::BISHOP] | board.bb_pieces[by_side_color][pieces::QUEEN];
-    if (get_diagonal_attacks_bb(board.bb_occupied_squares, square) | get_antidiagonal_attacks_bb(board.bb_occupied_squares, square)) & bishops_queens != 0 {
+    if (get_diagonal_attacks_bb(board.bb_occupied_squares, square, 0) | get_antidiagonal_attacks_bb(board.bb_occupied_squares, square, 0)) & bishops_queens != 0 {
         return true;
     }
     let rooks_queens = board.bb_pieces[by_side_color][pieces::ROOK] | board.bb_pieces[by_side_color][pieces::QUEEN];
-    if (get_rank_attacks_bb(board.bb_occupied_squares, square) | get_file_attacks_bb(board.bb_occupied_squares, square)) & rooks_queens != 0 {
+    if (get_rank_attacks_bb(board.bb_occupied_squares, square, 0) | get_file_attacks_bb(board.bb_occupied_squares, square, 0)) & rooks_queens != 0 {
         return true;
     }
     false
@@ -300,6 +349,7 @@ mod tests {
         move_count
     }
 
+    // Test the number of valid moves
     #[test]
     fn test_perft() {
         let results = vec![1, 20, 400, 8902, 197281, 4865609];
@@ -311,4 +361,23 @@ mod tests {
             println!("{} moves at depth {}", moves, i);
         }
     }
+
+    // Test a capture
+    #[test]
+    fn test_capture() {
+        let mut board = ChessBoard::new();
+        board.new_game();
+        board.make_move(12, 28); // e4
+        board.make_move(51, 35); // d5
+        let mut moves = generate_all_psuedo_legal_moves(&board, pieces::COLOR_WHITE);
+        retain_only_legal_moves(&mut board, &mut moves);
+        let mut captures = 0;
+        for m in moves.iter() {
+            if m.captured_piece.is_some() {
+                captures += 1;
+            }
+        }
+        assert_eq!(captures, 1);
+    }
+
 }

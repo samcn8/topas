@@ -17,6 +17,7 @@ use crate::evaluate;
 use crate::chess_board;
 use crate::movegen;
 use crate::pieces;
+use crate::bitboard;
 
 // Default number of TT entries
 const DEFAULT_NUM_TT_ELEMENTS: usize = 1000000;
@@ -36,6 +37,10 @@ const PV_MOVE_PRIORITY_BONUS: i32 = 400;
 const CUTOFF_PRIORITY_BONUS: i32 = 300;
 const PROMOTION_PRIORITY_BONUS: i32 = 200;
 const CAPTURE_PRIORITY_BONUS: i32 = 100;
+
+// Piece values in centipawns used in static exchange evaluation (SEE)
+// Indexed by PNBRQK position.
+const SEE_PIECE_VALUES: [i32; 6] = [100, 300, 300, 500, 900, 20000];
 
 // TT Flag corresponding to a value
 enum TTFlag {
@@ -86,6 +91,20 @@ struct TTEntry {
 
     // Whether or not this TT entry is still valid
     valid: bool,
+
+}
+
+// An entry into a static exchange evaluation (SEE) attack vector.
+struct SEEAttacker {
+
+    // The value of the piece attacking
+    value: i32,
+
+    // The location of the piece attacking
+    square: usize,
+
+    // A list of square locations of any blockers
+    blockers: Vec<usize>,
 
 }
 
@@ -219,6 +238,238 @@ impl SearchEngine {
         0
     }
 
+    // Add any "blockers" on the specified ray, except for the target.
+    // Used for SEE attacker computation.
+    fn add_blocks_to_see_attacker(&self, capture_square: usize, ray: u64, blockers: &mut Vec<usize>) {
+        // Found the target!  Get the blockers.
+        for s in bitboard::occupied_squares(ray & self.board.bb_occupied_squares) {
+            if s != capture_square {
+                blockers.push(s);
+            }
+        }
+    }
+
+    // Check all four directional "rays" starting from our position to see
+    // if we hit the target, assuming no blocking pieces exist.  Return true
+    // if we did, false if not.  Along the way, collect any blockers for the
+    // ray (if there is one) that hits the target.
+    fn check_bishop_for_see_attack(&self, square: usize, capture_square: usize, capture_square_bb: u64, blockers: &mut Vec<usize>) -> bool {
+        let mut test_ray = movegen::get_diagonal_attacks_bb(capture_square_bb, square, 1);
+        if test_ray & capture_square_bb != 0 {
+            self.add_blocks_to_see_attacker(capture_square, test_ray, blockers);
+            return true;
+        }
+        test_ray = movegen::get_diagonal_attacks_bb(capture_square_bb, square, 2);
+        if test_ray & capture_square_bb != 0 {
+            self.add_blocks_to_see_attacker(capture_square, test_ray, blockers);
+            return true;
+        }
+        test_ray = movegen::get_antidiagonal_attacks_bb(capture_square_bb, square, 1);
+        if test_ray & capture_square_bb != 0 {
+            self.add_blocks_to_see_attacker(capture_square, test_ray, blockers);
+            return true;
+        }
+        test_ray = movegen::get_antidiagonal_attacks_bb(capture_square_bb, square, 2);
+        if test_ray & capture_square_bb != 0 {
+            self.add_blocks_to_see_attacker(capture_square, test_ray, blockers);
+            return true;
+        }
+        return false;
+    }
+
+    // Check all four directional "rays" starting from our position to see
+    // if we hit the target, assuming no blocking pieces exist.  Return true
+    // if we did, false if not.  Along the way, collect any blockers for the
+    // ray (if there is one) that hits the target.
+    fn check_rook_for_see_attack(&self, square: usize, capture_square: usize, capture_square_bb: u64, blockers: &mut Vec<usize>) -> bool {
+        let mut test_ray = movegen::get_file_attacks_bb(capture_square_bb, square, 1);
+        if test_ray & capture_square_bb != 0 {
+            self.add_blocks_to_see_attacker(capture_square, test_ray, blockers);
+            return true;
+        }
+        test_ray = movegen::get_file_attacks_bb(capture_square_bb, square, 2);
+        if test_ray & capture_square_bb != 0 {
+            self.add_blocks_to_see_attacker(capture_square, test_ray, blockers);
+            return true;
+        }
+        test_ray = movegen::get_rank_attacks_bb(capture_square_bb, square, 1);
+        if test_ray & capture_square_bb != 0 {
+            self.add_blocks_to_see_attacker(capture_square, test_ray, blockers);
+            return true;
+        }
+        test_ray = movegen::get_rank_attacks_bb(capture_square_bb, square, 2);
+        if test_ray & capture_square_bb != 0 {
+            self.add_blocks_to_see_attacker(capture_square, test_ray, blockers);
+            return true;
+        }
+        return false;
+    }
+
+    // Perform static exchange evaluation (SEE) for a particular capture move.
+    // To keep this as fast as possible, this will evaluate the capture exchanges
+    // without checking if moves are legal (e.g., it will consider an illegal
+    // move that puts your king in check).  This will return a score for the capture.
+    // Scores greater than or equal to 0 are worth searching further because they
+    // could be winning captures.  Scores less than 0 are likely loosing captures
+    // and hence less worthy of further search.
+    // Note that only a simulation is performed here; we do not actually "make_move".
+    fn see_capture_eval(&self, capture_move: &movegen::ChessMove) -> i32 {
+
+        // Extract captured piece
+        let cap_piece = if let Some(c) = capture_move.captured_piece {
+            c
+        } else {
+            panic!("Attempting SEE on non-capture move")
+        };
+
+        // TODO - factor in en passant movement.  For now, we're going to just
+        // be safe and assume all en passant captures are worth searching.
+        if capture_move.is_en_passant {
+            return 1;
+        }
+
+        // Create a bitboard representing the capture square
+        let capture_square_bb = bitboard::to_bb(capture_move.end_square);
+
+        // Make a list of all attackers of the target square,
+        // even if there are nodes blocking the way (for sliding piece
+        // attackers).   We will note those blockers.  We will then simulate
+        // the attack sequence using the least valuable piece remaining for
+        // each side, removing potential blockers as we go, until there are
+        // no more attackers left.
+        // The following vector contains two other vectors -- one for white
+        // and one for black.  Each of these color vectors is a list of
+        // SEE_Attacker entries which indicate the piece value, square of
+        // the piece, and any blockers.
+        let mut attackers = vec![Vec::new(), Vec::new()];
+        for color in 0..2 {
+            for (piece, bb) in self.board.bb_pieces[color].iter().enumerate() {
+                for square in bitboard::occupied_squares(*bb) {
+
+                    // Skip the initial capture; we'll simulate that
+                    // seperately to kick things off.
+                    if square == capture_move.start_square {
+                        continue;
+                    }
+
+                    // Store blockers
+                    let mut blockers = Vec::new();
+
+                    // Get the attack bitboard of the appropriate piece
+                    let mut capture_attacker_bb = 0;
+                    if piece == pieces::PAWN {
+                        capture_attacker_bb = bitboard::BB_PAWN_ATTACKS[color][square];
+                    } else if piece == pieces::KNIGHT {
+                        capture_attacker_bb = bitboard::BB_KNIGHT_ATTACKS[square]
+                    } else if piece == pieces::BISHOP {
+                        if self.check_bishop_for_see_attack(square, capture_move.end_square, capture_square_bb, &mut blockers) {
+                            // We only have to indicate that we've attacked the square
+                            capture_attacker_bb = capture_square_bb;
+                        }
+                    } else if piece == pieces::ROOK {
+                        if self.check_rook_for_see_attack(square, capture_move.end_square, capture_square_bb, &mut blockers) {
+                            // We only have to indicate that we've attacked the square
+                            capture_attacker_bb = capture_square_bb;
+                        }
+                    } else if piece == pieces::QUEEN {
+                        if self.check_bishop_for_see_attack(square, capture_move.end_square, capture_square_bb, &mut blockers) {
+                            // We only have to indicate that we've attacked the square
+                            capture_attacker_bb = capture_square_bb;
+                        } else if self.check_rook_for_see_attack(square, capture_move.end_square, capture_square_bb, &mut blockers) {
+                            // We only have to indicate that we've attacked the square
+                            capture_attacker_bb = capture_square_bb;
+                        }
+                    } else if piece == pieces::KING {
+                        capture_attacker_bb = bitboard::BB_KING_ATTACKS[square]
+                    }
+
+                    // Determine if the piece is attacking the captured square
+                    // Note that bitbord is 0 otherwise, which will bypass
+                    // this if statement.
+                    if capture_attacker_bb & capture_square_bb != 0 {
+                        attackers[color].push(SEEAttacker {
+                            value: SEE_PIECE_VALUES[piece],
+                            square,
+                            blockers,
+                        });
+                    }
+
+                }
+            }
+        }
+
+        // Sort the attackers from least to most valuable (we're always going
+        // to attack with the least valuable piece first.
+        attackers[pieces::COLOR_WHITE].sort_unstable_by(|a, b| a.value.cmp(&b.value));
+        attackers[pieces::COLOR_BLACK].sort_unstable_by(|a, b| a.value.cmp(&b.value));
+
+        // Simulate the initial capture
+        let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
+        let mut current_turn_color = my_color;
+        let mut scores = Vec::new();
+        let mut score = SEE_PIECE_VALUES[cap_piece];
+        let mut attacked_piece_value = SEE_PIECE_VALUES[capture_move.piece];
+        scores.push(score);
+        let mut selected_attacker_square = Some(capture_move.start_square);
+        let mut selected_attacker_value = SEE_PIECE_VALUES[capture_move.piece];
+        current_turn_color = 1 - current_turn_color;
+
+        // Perform captures one be one until there are none left
+        loop {
+
+            // Remove the attacker as a blocker
+            if let Some(sa) = selected_attacker_square {
+                for color in 0..2 {
+                    for i in attackers[color].iter_mut() {
+                        if let Some(pos) = i.blockers.iter().position(|x| *x == sa) {
+                            i.blockers.remove(pos);
+                        }
+                    }
+                }
+            }
+
+            // Get the next non-blocked attacker
+            selected_attacker_square = None;
+            let mut attacker_pos = 0;
+            for i in attackers[current_turn_color].iter() {
+                if i.blockers.is_empty() {
+                    selected_attacker_square = Some(i.square);
+                    selected_attacker_value = i.value;
+                    break;
+                }
+                attacker_pos += 1;
+            }
+
+            // If we couldn't find a suitable attacker, we're done
+            if selected_attacker_square.is_none() {
+                break;
+            }
+
+            // Update the score with this attack and remove the attacker
+            if let Some(l) = scores.last() {
+                score = attacked_piece_value - l;
+            } else {
+                panic!("Cannot find last score");
+            }
+            attacked_piece_value = selected_attacker_value;
+            scores.push(score);
+            attackers[current_turn_color].remove(attacker_pos);
+            current_turn_color = 1 - current_turn_color;
+
+        }
+
+        // Finally, evaluate the scores (taking into account the option for a
+        // player to refuse to continue the capture line) and return in
+        // centipawns
+        for i in (1..scores.len()).rev() {
+            if scores[i-1] > -scores[i] {
+                scores[i-1] = -scores[i];
+            }
+        }
+        scores[0]
+        
+    }
+
     // This sorts moves, in place, with the highest priority moves first.
     // Priority from high to low is: (1) PV moves, (2) moves that cause
     // a beta cut-off, (3) captures, sorted by MVV-LVA, and (4) quiet moves.
@@ -295,6 +546,12 @@ impl SearchEngine {
 
             // Filter out non-captures
             if m.captured_piece.is_none() {
+                continue;
+            }
+
+            // Perform static exchange evaluation on this capture
+            // move to determine if it's worth searching further.
+            if self.see_capture_eval(m) < 0 {
                 continue;
             }
 
@@ -513,6 +770,61 @@ impl SearchEngine {
         // Provide the best move to the caller
         last_iteration_info
 
+    }
+
+}
+
+// =====================================
+//             UNIT TESTS
+// =====================================
+
+#[cfg(test)]
+mod tests {
+    
+    use crate::chess_board::ChessBoard;
+    use super::*;
+
+    // Test SEE
+    #[test]
+    fn test_see_capture() {
+        // Force a set of bitboards to look like this
+        // ........
+        // ...q....
+        // ........
+        // ...p.r..
+        // ........
+        // .Q......
+        // B.......
+        // ........
+        let mut board = ChessBoard::new();
+        board.bb_pieces[pieces::COLOR_WHITE][pieces::QUEEN] = bitboard::to_bb(17);
+        board.bb_pieces[pieces::COLOR_WHITE][pieces::BISHOP] = bitboard::to_bb(8);
+        board.bb_pieces[pieces::COLOR_BLACK][pieces::QUEEN] = bitboard::to_bb(51);
+        board.bb_pieces[pieces::COLOR_BLACK][pieces::PAWN] = bitboard::to_bb(35);
+        board.bb_pieces[pieces::COLOR_BLACK][pieces::ROOK] = bitboard::to_bb(37);
+        board.bb_occupied_squares = 0;
+        for color in 0..2 {
+            for piece in 0..6 {
+                board.bb_occupied_squares ^= board.bb_pieces[color][piece];
+            }
+        }
+        let m = movegen::ChessMove {
+            start_square: 17,
+            end_square: 35,
+            piece: pieces::QUEEN,
+            captured_piece: Some(pieces::PAWN),
+            priority: 0,
+            is_en_passant: false,
+        };
+        let searcher = SearchEngine {
+            board,
+            num_tt_entries: 0,
+            transposition_table: Vec::new(),
+            best_move_from_last_iteration: None,
+            moves_analyzed: 0,
+        };
+        let see_value = searcher.see_capture_eval(&m);
+        assert_eq!(see_value, -600);
     }
 
 }
