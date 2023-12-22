@@ -14,7 +14,9 @@
 use std::time;
 use std::cmp;
 use crate::evaluate;
-use crate::{chess_board, movegen, pieces};
+use crate::chess_board;
+use crate::movegen;
+use crate::pieces;
 
 // Default number of TT entries
 const DEFAULT_NUM_TT_ELEMENTS: usize = 1000000;
@@ -23,6 +25,17 @@ const DEFAULT_NUM_TT_ELEMENTS: usize = 1000000;
 const CHECKMATE_VALUE: i32 = 50000;
 const DRAW_VALUE: i32 = 0;
 const INF: i32 = 1000000;
+
+// When prioritizing moves, a bonus may be assigned to a move.
+// Principal variable (PV) moves are the most valuable, and are
+// usually discovered on the previous iterative deepening loop.
+// Moves that lead to a beta cutoff are also very valuable as they
+// can signficantly decrease the search space.  Promotions and
+// captures are valuable, followed by quiet moves.
+const PV_MOVE_PRIORITY_BONUS: i32 = 400;
+const CUTOFF_PRIORITY_BONUS: i32 = 300;
+const PROMOTION_PRIORITY_BONUS: i32 = 200;
+const CAPTURE_PRIORITY_BONUS: i32 = 100;
 
 // TT Flag corresponding to a value
 enum TTFlag {
@@ -73,6 +86,7 @@ struct TTEntry {
 
     // Whether or not this TT entry is still valid
     valid: bool,
+
 }
 
 // Information about the top move discovered from a search depth
@@ -184,6 +198,57 @@ impl SearchEngine {
 
     }
 
+    // This returns a priority bonus for move ordering if the move is
+    // a PV move or causes a beta cutoff.  This is determined via lookup
+    // in the transposition table.
+    fn get_move_priority_bonus(&self, start_square: usize, end_square: usize) -> i32 {
+        let tt_key = (self.board.zobrist_hash % self.num_tt_entries as u64) as usize;
+        if let Some(tt_entry) = &self.transposition_table[tt_key] {
+            if tt_entry.valid && tt_entry.zobrist_hash == self.board.zobrist_hash {
+                if let Some((bm_start_square, bm_end_square)) = tt_entry.best_move {
+                    if bm_start_square == start_square as u8 && bm_end_square == end_square as u8 {
+                        match tt_entry.flag {
+                            TTFlag::Exact => return PV_MOVE_PRIORITY_BONUS,
+                            TTFlag::Lowerbound => return CUTOFF_PRIORITY_BONUS,
+                            TTFlag::Upperbound => return 0,
+                        }
+                    }
+                }
+            }
+        }
+        0
+    }
+
+    // This sorts moves, in place, with the highest priority moves first.
+    // Priority from high to low is: (1) PV moves, (2) moves that cause
+    // a beta cut-off, (3) captures, sorted by MVV-LVA, and (4) quiet moves.
+    fn sort_moves(&self, moves: &mut Vec<movegen::ChessMove>) {
+
+        // Assign a priority to all moves
+        for m in moves.iter_mut() {
+
+            // Check the transposition table for PV and cut-off moves
+            let mut priority = self.get_move_priority_bonus(m.start_square, m.end_square);
+
+            // Check for promotions
+            if m.piece == pieces::PAWN && (m.end_square / 8 == 0 || m.end_square / 8 == 7) {
+                priority += PROMOTION_PRIORITY_BONUS;
+            }
+
+            // Check for captures, and prioritize based on MVV-LVA
+            if let Some(cap) = m.captured_piece {
+                priority += CAPTURE_PRIORITY_BONUS + pieces::MVV_LVA[cap][m.piece];
+            }
+
+            // Set priority
+            m.priority = priority;
+
+        }
+
+        // Sort moves by priority
+        moves.sort_unstable_by(|a, b| b.priority.cmp(&a.priority));
+    }
+
     // This is an implementation of the quiescence search, which allows
     // the engine to keep searching "non-quiet" (such as capture) moves
     // beyond the search horizon.  This is done to mitigate the horizon
@@ -212,7 +277,7 @@ impl SearchEngine {
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color);
         movegen::retain_only_legal_moves(&mut self.board, &mut moves);
-        // TODO - sort moves
+        self.sort_moves(&mut moves);
 
         // Check for checkmate and stalemate
         if moves.len() == 0 {
@@ -226,7 +291,7 @@ impl SearchEngine {
         }
 
         // Recursively search the non-quiet moves
-        for m in moves {
+        for m in moves.iter() {
 
             // Filter out non-captures
             if m.captured_piece.is_none() {
@@ -298,7 +363,7 @@ impl SearchEngine {
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color);
         movegen::retain_only_legal_moves(&mut self.board, &mut moves);
-        // TODO - sort moves
+        self.sort_moves(&mut moves);
 
         // Check for checkmate and stalemate
         if moves.len() == 0 {
@@ -314,7 +379,7 @@ impl SearchEngine {
         // Recursively search the moves
         let mut best_move = None;
         let mut value = -INF;
-        for m in moves {
+        for m in moves.iter() {
 
             // Make the move
             self.board.make_move(m.start_square, m.end_square);

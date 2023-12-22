@@ -20,6 +20,9 @@ pub struct ChessMove {
     // Captured piece, or None if no capture made
     pub captured_piece: Option<usize>,
 
+    // Priority of the move, only relavant for search
+    pub priority: i32,
+
 }
 
 // Converts a standard square position string into a square ID.
@@ -189,13 +192,14 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
                 continue;
             }
 
-            // First get quiet moves
+            // First get non-capture moves
             for m in bitboard::occupied_squares(quite_move_bb) {
                 let cmove = ChessMove {
                     start_square: square,
                     end_square: m,
                     piece,
                     captured_piece: None,
+                    priority: 0,
                 };
                 quiet_moves.push(cmove);
             }
@@ -203,11 +207,13 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
             // Next get capture moves
             for m in bitboard::occupied_squares(capture_move_bb) {
                 // Figure out the piece that is being captured
+                let cap = get_opponents_captured_piece(&board.bb_pieces[opp_color], m, is_en_passant);
                 let cmove = ChessMove {
                     start_square: square,
                     end_square: m,
                     piece,
-                    captured_piece: Some(get_opponents_captured_piece(&board.bb_pieces[opp_color], m, is_en_passant)),
+                    captured_piece: Some(cap),
+                    priority: 0,
                 };
                 capture_moves.push(cmove);
             }
@@ -216,6 +222,7 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
     }
 
     // Order capture moves first (by appending quiet moves to the end)
+    // This will get re-sorted anyway, but may make the re-sort faster.
     capture_moves.append(&mut quiet_moves);
     capture_moves
 }
@@ -285,7 +292,7 @@ mod tests {
         let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = generate_all_psuedo_legal_moves(&board, my_color);
         retain_only_legal_moves(board, &mut moves);
-        for m in moves {
+        for m in moves.iter() {
             board.make_move(m.start_square, m.end_square);
             move_count += get_number_of_valid_moves(board, depth - 1);
             board.unmake_move();

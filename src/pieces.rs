@@ -1,5 +1,5 @@
 //! This module contains information and helpful constants related
-//! to game pieces.
+//! to game pieces and scoring.
 
 // Constants for identifying pieces
 pub const PAWN: usize = 0;
@@ -18,6 +18,18 @@ pub const PIECE_ID_TO_CHAR: [[char; 6]; 2] = [['P', 'N', 'B', 'R', 'Q', 'K'],
 // Constants for centipawn value of pieces (indexes using
 // the piece constants listed above)
 pub const PIECE_VALUES: [i32; 6] = [100, 320, 330, 500, 900, 20000];
+
+// Most valuable victom / least valuable attacker (MVV-LVA).  This is used
+// for ordering capture moves.  Higher numbers result in higher
+// priority for move ordering.
+// See https://www.chessprogramming.org/MVV-LVA
+pub const MVV_LVA: [[i32; 6]; 5] = [
+    [5, 4, 3, 2, 1, 0],  // Pawn Victim -> PNBRQK Attackers
+    [11, 10, 9, 8, 7, 6], // Knight Victim -> PNBRQK Attackers
+    [17, 16, 15, 14, 13, 12], // Bishop Victim -> PNBRQK Attackers
+    [23, 22, 21, 20, 19, 18], // Room Victim -> PNBRQK Attackers
+    [29, 28, 27, 26, 25, 24], // Queen Victim -> PNBRQK Attackers
+];
 
 // Piece square tables (PST) for augmenting piece values
 // based on where they reside.

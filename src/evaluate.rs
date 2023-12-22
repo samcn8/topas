@@ -1,6 +1,9 @@
 //! This module contains functions related to game state evaluation.
 
-use crate::{chess_board, bitboard, pieces, movegen};
+use crate::chess_board;
+use crate::bitboard;
+use crate::pieces;
+use crate::movegen;
 
 // Bonuses and penalities, in centipawns, for various situations
 const TEMPO_BONUS: i32 = 28;
