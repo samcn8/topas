@@ -102,10 +102,24 @@ pub fn static_evaluation_phase(board: &chess_board::ChessBoard, is_end_game: boo
     for color in 0..2 {
         for (piece, bb) in board.bb_pieces[color].iter().enumerate() {
             for square in bitboard::occupied_squares(*bb) {
+                
+                // The PST's are from white's perspective, so we have to flip
+                // the look up for black
+                let rank = square / 8;
+                let file = square % 8;
+                let black_pst_square = (7 - rank) * 8 + (7 - file);
                 if is_end_game {
-                    totals[color] += pieces::PIECE_VALUES[piece] + pieces::PST_END_GAME[piece][square];
+                    if color == pieces::COLOR_WHITE {
+                        totals[color] += pieces::PIECE_VALUES[piece] + pieces::PST_END_GAME[piece][square];
+                    } else {
+                        totals[color] += pieces::PIECE_VALUES[piece] + pieces::PST_END_GAME[piece][black_pst_square];
+                    }
                 } else {
-                    totals[color] += pieces::PIECE_VALUES[piece] + pieces::PST_MIDDLE_GAME[piece][square];
+                    if color == pieces::COLOR_WHITE {
+                        totals[color] += pieces::PIECE_VALUES[piece] + pieces::PST_MIDDLE_GAME[piece][square];
+                    } else {
+                        totals[color] += pieces::PIECE_VALUES[piece] + pieces::PST_MIDDLE_GAME[piece][black_pst_square];
+                    }
                 }
             }
         }
@@ -122,8 +136,8 @@ pub fn static_evaluation_phase(board: &chess_board::ChessBoard, is_end_game: boo
     // Mobility bonus, giving a bonus for every psuedo-legal move possible.
     // Note that we do not validate these moves in order to keep this function
     // as fast as possible.
-    totals[pieces::COLOR_WHITE] += MOBILITY_BONUS * movegen::generate_all_psuedo_legal_moves(board, pieces::COLOR_WHITE).len() as i32;
-    totals[pieces::COLOR_BLACK] += MOBILITY_BONUS * movegen::generate_all_psuedo_legal_moves(board, pieces::COLOR_BLACK).len() as i32;
+    //totals[pieces::COLOR_WHITE] += MOBILITY_BONUS * movegen::generate_all_psuedo_legal_moves(board, pieces::COLOR_WHITE).len() as i32;
+    //totals[pieces::COLOR_BLACK] += MOBILITY_BONUS * movegen::generate_all_psuedo_legal_moves(board, pieces::COLOR_BLACK).len() as i32;
 
     // Pawn structure penalties and bonuses
     for color in 0..2 {

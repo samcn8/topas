@@ -34,7 +34,7 @@ fn convert_square_str_into_id(move_str: &str) -> usize {
     let file = if let Some(e) = move_str.chars().nth(0) {e} else {panic!("Invalid move string - file")};
     let file = if let Some(e) = "abcdebgh".find(file) {e as usize} else {panic!("Invalid move string - file")};
     let rank = if let Some(e) = move_str.chars().nth(1) {e} else {panic!("Invalid move string - rank")};
-    let rank = if let Some(e) = rank.to_digit(10) {e as usize} else {panic!("Invalid move string - rank")};
+    let rank = if let Some(e) = rank.to_digit(10) {(e-1) as usize} else {panic!("Invalid move string - rank")};
     rank * 8 + file
 }
 

@@ -611,11 +611,9 @@ impl ChessBoard {
         None
     }
 
-    // Print the game state, for debugging purposes
+    // Print the board
     #[allow(dead_code)]
     pub fn print(&self) {
-        println!("----------------- DEBUG STATE -----------------");
-        println!("BOARD STATE");
         let mut char_board = [['.'; 8]; 8];
         let mut index = 0;
         for (color, _) in self.bb_pieces.iter().enumerate() {
@@ -637,6 +635,14 @@ impl ChessBoard {
             let str: String = cs.iter().collect();
             println!("   {}", str);
         }
+    }
+
+    // Print the game state, for debugging purposes
+    #[allow(dead_code)]
+    pub fn print_debug(&self) {
+        println!("----------------- DEBUG STATE -----------------");
+        println!("BOARD STATE");
+        self.print();
         println!("OTHER STATE");
         println!("   move_history: {:?}", self.move_history);
         println!("   zobrist_history: {:?}", self.zobrist_history);

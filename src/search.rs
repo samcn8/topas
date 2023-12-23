@@ -50,7 +50,7 @@ enum TTFlag {
     Exact,
 
     // A lower bound value is one that failed high and caused a
-    // beta-cutoff -- the move was too good
+    // beta-cutoff -- the true value is at least as good as this.
     Lowerbound,
 
     // An upper bound value is one that failed low, meaning it didn't
@@ -198,7 +198,7 @@ impl SearchEngine {
     // with spaces between each move, as dictated by the UCI protocol.
     // move.  For instance, "e2e4 b8c6".  Promotion looks like "f7f8q".
     // TODO: Handle FEN string input if not starting at the start position.
-    fn set_board_state(&mut self, move_str: &str) {
+    pub fn set_board_state(&mut self, move_str: &str) {
 
         // Get the list of moves passed in
         let moves = movegen::convert_moves_str_into_list(move_str);
@@ -375,6 +375,7 @@ impl SearchEngine {
                         if self.check_bishop_for_see_attack(square, capture_move.end_square, capture_square_bb, &mut blockers) {
                             // We only have to indicate that we've attacked the square
                             capture_attacker_bb = capture_square_bb;
+
                         } else if self.check_rook_for_see_attack(square, capture_move.end_square, capture_square_bb, &mut blockers) {
                             // We only have to indicate that we've attacked the square
                             capture_attacker_bb = capture_square_bb;
@@ -511,7 +512,7 @@ impl SearchEngine {
         // This is our stand pat score, which is the current score
         // of the board without additional moves.
         let stand_pat = evaluate::static_evaluation(&self.board);
-        
+
         // Check for a beta cut-off
         if stand_pat >= beta {
             return beta;
@@ -521,6 +522,11 @@ impl SearchEngine {
         // See https://www.chessprogramming.org/Delta_Pruning
         if stand_pat < alpha - pieces::PIECE_VALUES[pieces::QUEEN] {
             return alpha;
+        }
+
+        // Increase alpha
+        if alpha < stand_pat {
+            alpha = stand_pat;
         }
 
         // Generate all legal moves.  Note that we will only search
@@ -549,6 +555,9 @@ impl SearchEngine {
                 continue;
             }
 
+            // At this point, we consider this an analyzed move
+            self.moves_analyzed += 1;
+
             // Perform static exchange evaluation on this capture
             // move to determine if it's worth searching further.
             if self.see_capture_eval(m) < 0 {
@@ -576,7 +585,7 @@ impl SearchEngine {
 
         }
 
-        // Return alpha, which is the best we can do without failing high
+        // Return alpha, the minimum score we know we can get
         alpha
 
     }
@@ -683,7 +692,7 @@ impl SearchEngine {
         } else if value >= beta {
 
             // The best move in this subtree failed high, meaning that
-            // it was too good and caused a beta cut-off.
+            // it caused a beta cut-off.
             self.transposition_table[tt_key] = Some(TTEntry {
                 zobrist_hash: self.board.zobrist_hash,
                 depth,
@@ -696,7 +705,7 @@ impl SearchEngine {
         } else {
 
             // The best move in this subtree is between alpha and beta,
-            // meaning it is a PV move.
+            // meaning it is an exact value
             self.transposition_table[tt_key] = Some(TTEntry {
                 zobrist_hash: self.board.zobrist_hash,
                 depth,
@@ -713,7 +722,7 @@ impl SearchEngine {
             self.best_move_from_last_iteration = best_move;
         }
         
-        // Return the score of our best move (which is also now alpha)
+        // Return the score of our best move
         value
 
     }
@@ -752,7 +761,7 @@ impl SearchEngine {
                 moves_analyzed: self.moves_analyzed,
                 depth_searched: depth,
                 duration_of_search: duration_iteration.as_millis(),
-                pv_line: Vec::new(),
+                pv_line: self.extract_pv_line(),
             });
 
             // TODO - send this to caller
@@ -770,6 +779,39 @@ impl SearchEngine {
         // Provide the best move to the caller
         last_iteration_info
 
+    }
+
+    // Extract the PV line from the transposition table
+    fn extract_pv_line(&mut self) -> Vec<(u8, u8)> {
+        let mut pv_line = Vec::new();
+        let mut moves_made = 0;
+        let mut zobrist_loop_detect = Vec::new();
+        loop {
+            let tt_key = (self.board.zobrist_hash % self.num_tt_entries as u64) as usize;
+            if let Some(tt_entry) = &self.transposition_table[tt_key] {
+                if tt_entry.valid && tt_entry.zobrist_hash == self.board.zobrist_hash && !zobrist_loop_detect.contains(&tt_entry.zobrist_hash) {
+                    if let TTFlag::Exact = tt_entry.flag {
+                        zobrist_loop_detect.push(tt_entry.zobrist_hash);
+                        // TODO check to make sure this best move is legal
+                        if let Some(bm) = tt_entry.best_move {
+                            pv_line.push(bm);
+                            self.board.make_move(bm.0 as usize, bm.1 as usize);
+                            moves_made += 1;
+                        }
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        for i in 0..moves_made {
+            self.board.unmake_move();
+        }
+        pv_line
     }
 
 }
@@ -825,6 +867,45 @@ mod tests {
         };
         let see_value = searcher.see_capture_eval(&m);
         assert_eq!(see_value, -600);
+
+        // Force a set of bitboards to look like this
+        // ...Q....
+        // ...q....
+        // ........
+        // ...p.r..
+        // ........
+        // .B......
+        // Q.......
+        // ........
+        let mut board = ChessBoard::new();
+        board.bb_pieces[pieces::COLOR_WHITE][pieces::QUEEN] = bitboard::to_bb(8) | bitboard::to_bb(59);
+        board.bb_pieces[pieces::COLOR_WHITE][pieces::BISHOP] = bitboard::to_bb(17);
+        board.bb_pieces[pieces::COLOR_BLACK][pieces::QUEEN] = bitboard::to_bb(51);
+        board.bb_pieces[pieces::COLOR_BLACK][pieces::PAWN] = bitboard::to_bb(35);
+        board.bb_pieces[pieces::COLOR_BLACK][pieces::ROOK] = bitboard::to_bb(37);
+        board.bb_occupied_squares = 0;
+        for color in 0..2 {
+            for piece in 0..6 {
+                board.bb_occupied_squares ^= board.bb_pieces[color][piece];
+            }
+        }
+        let m = movegen::ChessMove {
+            start_square: 17,
+            end_square: 35,
+            piece: pieces::BISHOP,
+            captured_piece: Some(pieces::PAWN),
+            priority: 0,
+            is_en_passant: false,
+        };
+        let searcher = SearchEngine {
+            board,
+            num_tt_entries: 0,
+            transposition_table: Vec::new(),
+            best_move_from_last_iteration: None,
+            moves_analyzed: 0,
+        };
+        let see_value = searcher.see_capture_eval(&m);
+        assert_eq!(see_value, 100);
     }
 
 }
