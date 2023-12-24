@@ -20,7 +20,7 @@ use crate::pieces;
 use crate::bitboard;
 
 // Default number of TT entries
-const DEFAULT_NUM_TT_ELEMENTS: usize = 1000000;
+const DEFAULT_NUM_TT_ELEMENTS: usize = 10000000;
 
 // Scores for terminal states and infinity
 const CHECKMATE_VALUE: i32 = 50000;
@@ -111,12 +111,6 @@ struct SEEAttacker {
 // Information about the top move discovered from a search depth
 #[derive(Debug)]
 pub struct BestMoveInformation {
-
-    // True if we are still searching.  This means that we've
-    // completed an iterative deepening loop, but we still have
-    // more to go.  If this is true, then this is for informational
-    // purposes only.  If this is false, it is the final best move.
-    pub still_searching: bool,
 
     // The best move
     // Represents (start square, end square)
@@ -753,19 +747,26 @@ impl SearchEngine {
 
             let duration_iteration = start_time_iteration.elapsed();
 
-            // Create a record for it, and give it back to the caller
-            last_iteration_info = Some(BestMoveInformation {
-                still_searching: if depth == max_depth {false} else {true},
+            // Create a record for it
+            let info = BestMoveInformation {
                 best_move_from_last_iteration: self.best_move_from_last_iteration,
                 value,
                 moves_analyzed: self.moves_analyzed,
                 depth_searched: depth,
                 duration_of_search: duration_iteration.as_millis(),
                 pv_line: self.extract_pv_line(),
-            });
+            };
 
             // TODO - send this to caller
-            println!("{:?}", last_iteration_info);
+            println!("info depth {} score cp {} nodes {} time {} pv {}",
+                info.depth_searched,
+                info.value,
+                info.moves_analyzed,
+                info.duration_of_search,
+                movegen::convert_move_list_to_lan(&info.pv_line));
+
+            // Store the record
+            last_iteration_info = Some(info);
 
             // Reset some state for next iteration
             self.best_move_from_last_iteration = None;
@@ -777,6 +778,14 @@ impl SearchEngine {
         self.transposition_table.resize_with(self.num_tt_entries, ||-> Option<TTEntry> {None});
 
         // Provide the best move to the caller
+        let mut bm = String::from("0000");
+        if let Some(info) = &last_iteration_info {
+            if let Some((move_start, move_end)) = info.best_move_from_last_iteration {
+                let move_vec = vec!((move_start, move_end));
+                bm = movegen::convert_move_list_to_lan(&move_vec);
+            }
+        }
+        println!("bestmove {}", bm);
         last_iteration_info
 
     }
@@ -808,7 +817,7 @@ impl SearchEngine {
                 break;
             }
         }
-        for i in 0..moves_made {
+        for _i in 0..moves_made {
             self.board.unmake_move();
         }
         pv_line

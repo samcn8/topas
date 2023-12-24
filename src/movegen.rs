@@ -28,6 +28,23 @@ pub struct ChessMove {
 
 }
 
+// Converts a list of moves to long algebraic notation
+pub fn convert_move_list_to_lan(moves: &Vec<(u8, u8)>) -> String {
+    let mut lan_str = String::new();
+    for m in moves.iter() {
+        let rank_start = (m.0 / 8 + 1).to_string();
+        let rank_end = (m.1 / 8 + 1).to_string();
+        let file_start = "abcdefgh".chars().nth((m.0 % 8) as usize).unwrap().to_string();
+        let file_end= "abcdefgh".chars().nth((m.1 % 8) as usize).unwrap().to_string();
+        lan_str.push_str(&file_start);
+        lan_str.push_str(&rank_start);
+        lan_str.push_str(&file_end);
+        lan_str.push_str(&rank_end);
+        lan_str.push_str(" ");
+    }
+    lan_str
+}
+
 // Converts a standard square position string into a square ID.
 // For instance, "a3" -> 3
 fn convert_square_str_into_id(move_str: &str) -> usize {
