@@ -74,7 +74,7 @@ impl UCI {
         if tokens.len() >= 2 {
             if tokens[1] == "startpos" {
                 let mut move_str = String::new();
-                for i in 2..tokens.len() {
+                for i in 3..tokens.len() {
                     move_str.push_str(tokens[i]);
                     move_str.push_str(" ");
                 }

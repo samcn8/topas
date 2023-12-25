@@ -48,10 +48,10 @@ pub fn convert_move_list_to_lan(moves: &Vec<(u8, u8)>) -> String {
 // Converts a standard square position string into a square ID.
 // For instance, "a3" -> 3
 fn convert_square_str_into_id(move_str: &str) -> usize {
-    let file = if let Some(e) = move_str.chars().nth(0) {e} else {panic!("Invalid move string - file")};
-    let file = if let Some(e) = "abcdebgh".find(file) {e as usize} else {panic!("Invalid move string - file")};
-    let rank = if let Some(e) = move_str.chars().nth(1) {e} else {panic!("Invalid move string - rank")};
-    let rank = if let Some(e) = rank.to_digit(10) {(e-1) as usize} else {panic!("Invalid move string - rank")};
+    let file = if let Some(e) = move_str.chars().nth(0) {e} else {panic!("Invalid move string - file - {}", move_str)};
+    let file = if let Some(e) = "abcdefgh".find(file) {e as usize} else {panic!("Invalid move string - file - {}", move_str)};
+    let rank = if let Some(e) = move_str.chars().nth(1) {e} else {panic!("Invalid move string - rank - {}", move_str)};
+    let rank = if let Some(e) = rank.to_digit(10) {(e-1) as usize} else {panic!("Invalid move string - rank - {}", move_str)};
     rank * 8 + file
 }
 
@@ -332,10 +332,23 @@ pub fn is_king_in_check(board: &chess_board::ChessBoard, king_color: usize) -> b
 pub fn retain_only_legal_moves(board: &mut chess_board::ChessBoard, moves: &mut Vec<ChessMove>) {
     let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
     moves.retain(|i| {
+
+        // If this is a castling move, ensure the king is not in check
+        // and the square the king is moving through is not attacked.
+        if i.piece == pieces::KING && i.start_square.abs_diff(i.end_square) == 2 {
+            let opp_color = 1 - my_color;
+            let through_square = if i.start_square > i.end_square {i.start_square - 1} else {i.start_square + 1};
+            if is_king_in_check(board, my_color) || is_square_attacked_by_side(board, through_square, opp_color){
+                return false;
+            }
+        }
+
+        // Ensure the king is not in check after the move is made
         board.make_move(i.start_square, i.end_square);
         let keepit = !is_king_in_check(board, my_color);
         board.unmake_move();
         keepit
+
     });
 
 }
