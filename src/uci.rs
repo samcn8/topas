@@ -1,7 +1,7 @@
 // This module implements the Universal Chess Interface (UCI).
 
 use std::io;
-use crate::search;
+use crate::{search, pieces};
 
 pub struct UCI {
     
@@ -87,12 +87,42 @@ impl UCI {
     // This is the main request to search.  The search must run
     // in a seperate thread in order to keep UCI responsive.
     fn go_command(&mut self, tokens: &Vec<&str>) {
-        if tokens.len() == 3 && tokens[1] == "depth" {
-            if let Ok(d) = tokens[2].parse::<u8>() {
-                // TODO -- this needs to be handled in a sepearte thread
-                self.engine.find_best_move(d).unwrap();
+        let my_color = self.engine.color_turn();
+        let my_color_time_param = if my_color == pieces::COLOR_WHITE {"wtime"} else {"btime"};
+        let my_color_inc_param = if my_color == pieces::COLOR_WHITE {"winc"} else {"binc"};
+        let mut my_time = -1;
+        let mut my_inc = -1;
+        let mut depth = 0;
+        if let Some(e) = tokens.iter().position(|&x| x == "depth") {
+            if tokens.len() > e+1 {
+                if let Ok(d) = tokens[e+1].parse::<u8>() {
+                    depth = d;
+                }
             }
         }
+        if let Some(e) = tokens.iter().position(|&x| x == my_color_time_param) {
+            if tokens.len() > e+1 {
+                if let Ok(d) = tokens[e+1].parse::<i32>() {
+                    my_time = d;
+                }
+            }
+        }
+        if let Some(e) = tokens.iter().position(|&x| x == my_color_inc_param) {
+            if tokens.len() > e+1 {
+                if let Ok(d) = tokens[e+1].parse::<i32>() {
+                    my_inc = d;
+                }
+            }
+        }
+
+        // Ensure we're either using depth or time as a bound, else
+        // we'll never end.
+        if depth > 0 || my_time > 0 {
+            self.engine.find_best_move(depth, my_time, my_inc).unwrap();
+        } else {
+            println!("Invalid go parameters; ignoring");
+        }
+
     }
 
     // Process an unknown commabd

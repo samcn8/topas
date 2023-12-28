@@ -25,7 +25,7 @@ const DEFAULT_NUM_TT_ELEMENTS: usize = 10000000;
 // Scores for terminal states and infinity
 const CHECKMATE_VALUE: i32 = 50000;
 const DRAW_VALUE: i32 = 0;
-const INF: i32 = 1000000;
+const INF: i32 = 100000000;
 
 // When prioritizing moves, a bonus may be assigned to a move.
 // Principal variable (PV) moves are the most valuable, and are
@@ -41,6 +41,10 @@ const CAPTURE_PRIORITY_BONUS: i32 = 100;
 // Piece values in centipawns used in static exchange evaluation (SEE)
 // Indexed by PNBRQK position.
 const SEE_PIECE_VALUES: [i32; 6] = [100, 300, 300, 500, 900, 20000];
+
+// How frequently (in number of function calls of negamax) to check for
+// a "did I run out of time" condition
+const CHECK_TIME_CONDITION_INTERVAL: u64 = 5000;
 
 // TT Flag corresponding to a value
 enum TTFlag {
@@ -155,6 +159,18 @@ pub struct SearchEngine {
     // Total moves analyzed in current search
     moves_analyzed: i32,
 
+    // The maximum time we can spend on this move
+    time_max_for_move: u128,
+
+    // The time we started the move
+    move_start_time: time::Instant,
+
+    // Whether the current iteration was halted due to running out of time
+    halt_time_over: bool,
+
+    // Count down until checking if we're out of time
+    time_check_countdown: u64,
+
 }
 
 impl SearchEngine {
@@ -167,6 +183,10 @@ impl SearchEngine {
             transposition_table: Vec::new(),
             best_move_from_last_iteration: None,
             moves_analyzed: 0,
+            time_max_for_move: 0,
+            move_start_time: time::Instant::now(),
+            halt_time_over: false,
+            time_check_countdown: CHECK_TIME_CONDITION_INTERVAL,
         }
     }
 
@@ -209,6 +229,11 @@ impl SearchEngine {
         self.best_move_from_last_iteration = None;
         self.moves_analyzed = 0;
 
+    }
+
+    // Returns the color of the player to move
+    pub fn color_turn(&self) -> usize {
+        if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK}
     }
 
     // This returns a priority bonus for move ordering if the move is
@@ -503,6 +528,21 @@ impl SearchEngine {
     // See https://www.chessprogramming.org/Quiescence_Search
     fn quiesce(&mut self, mut alpha: i32, beta: i32) -> i32 {
         
+        // Before doing any searching, check to make sure we're not
+        // out of time.  For performance reasons, we won't check this
+        // condition on every negamax call.
+        if self.halt_time_over {
+            return 0;
+        }
+        self.time_check_countdown -= 1;
+        if self.time_check_countdown <= 0 {
+            self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
+            if self.move_start_time.elapsed().as_millis() > self.time_max_for_move {
+                self.halt_time_over = true;
+                return 0;
+            }
+        }
+
         // This is our stand pat score, which is the current score
         // of the board without additional moves.
         let stand_pat = evaluate::static_evaluation(&self.board);
@@ -590,6 +630,21 @@ impl SearchEngine {
     // See https://en.wikipedia.org/wiki/Negamax
     fn negamax(&mut self, depth: u8, mut alpha: i32, mut beta: i32, root: bool) -> i32 {
         
+        // Before doing any searching, check to make sure we're not
+        // out of time.  For performance reasons, we won't check this
+        // condition on every negamax call.
+        if self.halt_time_over {
+            return 0;
+        }
+        self.time_check_countdown -= 1;
+        if self.time_check_countdown <= 0 {
+            self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
+            if self.move_start_time.elapsed().as_millis() > self.time_max_for_move {
+                self.halt_time_over = true;
+                return 0;
+            }
+        }
+
         // Update moves analyzed count
         self.moves_analyzed += 1;
 
@@ -725,12 +780,45 @@ impl SearchEngine {
     // This uses self.board as the current state of the board to search from.
     // This uses an iterative deepening search.  The PV move found in the
     // previous iteration is the first searched node in the next iteration.
-    pub fn find_best_move(&mut self, max_depth: u8) -> Option<BestMoveInformation> {
+    pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32) -> Option<BestMoveInformation> {
 
-        // Santity check
-        if max_depth == 0 {
-            panic!("Invalid search depth of 0");
+        // Ensure we're either using depth or time as a limiter
+        if max_depth == 0 && time_available <= 0 {
+            println!("Search must be limited by depth or time; ignoring");
+            return None;
         }
+
+        // Sanity check on transposition tables.  Note that the user should
+        // have sent a ucinewgame command first to reset the transposition
+        // tables.  But, if they did not, we'll reset them here so we don't
+        // crash.
+        if self.transposition_table.len() == 0 {
+            self.transposition_table.clear();
+            self.transposition_table.resize_with(self.num_tt_entries, ||-> Option<TTEntry> {None});
+        }
+
+        // If depth is 0, then we're not using depth as a limiter
+        if max_depth == 0 {
+            max_depth = 250;
+        }
+
+        // If time_available is greater than 0, then we're using
+        // time as a limiter
+        let mut time_for_move = INF;
+        if time_available > 0 {
+            time_for_move = time_available / 40 + time_inc / 2;
+            if time_for_move > time_available {
+                time_for_move = time_available - 500;
+            }
+            if time_for_move < 0 {
+                time_for_move = 100;
+            }
+        }
+
+        // Update start time and move time
+        self.move_start_time =  time::Instant::now();
+        self.time_max_for_move = time_for_move as u128;
+        self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
 
         // Information about the last iteration
         let mut last_iteration_info: Option<BestMoveInformation> = None;
@@ -739,11 +827,22 @@ impl SearchEngine {
         let mut value: i32;
         for depth in 1..(max_depth+1) {
             
+            // Don't start this iteration if we don't have sufficient time
+            if depth > 1 && self.move_start_time.elapsed().as_millis() * 2 > self.time_max_for_move {
+                break;
+            }
+
             // Timing
             let start_time_iteration = time::Instant::now();
 
             // Find the best move using negamax
             value = self.negamax(depth, -INF, INF, true);
+
+            // Check if this search was halted due to time and if so
+            // then ignore the results
+            if self.halt_time_over {
+                break;
+            }
 
             let duration_iteration = start_time_iteration.elapsed();
 
@@ -773,9 +872,12 @@ impl SearchEngine {
             self.moves_analyzed = 0;
         }
 
-        // Clear out the transposition tables
+        // Clear out the transposition tables and search-specific state
         self.transposition_table.clear();
         self.transposition_table.resize_with(self.num_tt_entries, ||-> Option<TTEntry> {None});
+        self.halt_time_over = false;
+        self.time_max_for_move = 0;
+        self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
 
         // Provide the best move to the caller
         let mut bm = String::from("0000");
@@ -873,6 +975,10 @@ mod tests {
             transposition_table: Vec::new(),
             best_move_from_last_iteration: None,
             moves_analyzed: 0,
+            time_max_for_move: 0,
+            move_start_time: time::Instant::now(),
+            halt_time_over: false,
+            time_check_countdown: CHECK_TIME_CONDITION_INTERVAL,
         };
         let see_value = searcher.see_capture_eval(&m);
         assert_eq!(see_value, -600);
@@ -912,6 +1018,10 @@ mod tests {
             transposition_table: Vec::new(),
             best_move_from_last_iteration: None,
             moves_analyzed: 0,
+            time_max_for_move: 0,
+            move_start_time: time::Instant::now(),
+            halt_time_over: false,
+            time_check_countdown: CHECK_TIME_CONDITION_INTERVAL,
         };
         let see_value = searcher.see_capture_eval(&m);
         assert_eq!(see_value, 100);
