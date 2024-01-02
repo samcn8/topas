@@ -806,7 +806,7 @@ impl SearchEngine {
         // time as a limiter
         let mut time_for_move = INF;
         if time_available > 0 {
-            time_for_move = time_available / 40 + time_inc / 2;
+            time_for_move = time_available / 25 + time_inc / 2;
             if time_for_move > time_available {
                 time_for_move = time_available - 500;
             }
