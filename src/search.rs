@@ -554,7 +554,7 @@ impl SearchEngine {
 
         // Delta pruning
         // See https://www.chessprogramming.org/Delta_Pruning
-        if stand_pat < alpha - pieces::PIECE_VALUES[pieces::QUEEN] {
+        if stand_pat < alpha - pieces::PIECE_VALUES_MG[pieces::QUEEN] {
             return alpha;
         }
 

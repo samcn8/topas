@@ -48,4 +48,5 @@ Throughout the course of this project, I scoured the Internet for information re
  * The Mediocre Chess blog: http://mediocrechess.blogspot.com
  * Stockfish: https://github.com/official-stockfish/Stockfish
  * Snakefish (particularly the excellent explaination of Kindergarten bitboards): https://github.com/cglouch/snakefish
+ * Piece square tables and piece values are from https://www.chessprogramming.org/PeSTO%27s_Evaluation_Function, which credits Ronald Friedrich's RofChade engine and specifically this forum thread: http://www.talkchess.com/forum3/viewtopic.php?f=2&t=68311&start=19.
 
