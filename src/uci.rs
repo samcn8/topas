@@ -1,7 +1,10 @@
 // This module implements the Universal Chess Interface (UCI).
+// See https://en.wikipedia.org/wiki/Universal_Chess_Interface
 
 use std::io;
-use crate::{search, pieces};
+use crate::search;
+use crate::pieces;
+use crate::chess_board;
 
 pub struct UCI {
     
@@ -25,9 +28,8 @@ impl UCI {
         loop {
 
             // Get the UCI command and parse into tokens
-            let mut uci_command_raw = String::new();
-            io::stdin().read_line(&mut uci_command_raw).expect("Failed to read line");
-            let mut uci_command = uci_command_raw.to_lowercase();
+            let mut uci_command = String::new();
+            io::stdin().read_line(&mut uci_command).expect("Failed to read line");
             let tokens: Vec<&str> = uci_command.split_whitespace().collect();
             
             // Process the command based on the first token
@@ -38,13 +40,11 @@ impl UCI {
                     "ucinewgame" => self.ucinewgame_command(),
                     "position" => self.position_command(&tokens),
                     "go" => self.go_command(&tokens),
+                    "print" => self.print_board(),
                     "quit" => break,
                     _ => self.unknown_command(),
                 }
             }
-            
-            // Prepare for next command
-            uci_command.clear();
 
         }
 
@@ -72,14 +72,32 @@ impl UCI {
     // have been sent before this, which clears the transposition tables.
     fn position_command(&mut self, tokens: &Vec<&str>) {
         if tokens.len() >= 2 {
+
+            let fen_str;
+            let mut move_str = String::new();
+            let move_start;
+
+            // Get the FEN representation of the board
             if tokens[1] == "startpos" {
-                let mut move_str = String::new();
-                for i in 3..tokens.len() {
+                fen_str = String::from(chess_board::STARTFEN);
+                move_start = 2;
+            } else if tokens[1] == "fen" && tokens.len() >= 8 {
+                fen_str = format!("{} {} {} {} {} {}", tokens[2], tokens[3], tokens[4], tokens[5], tokens[6], tokens[7]);
+                move_start = 8;
+            } else {
+                return;
+            }
+
+            // Get any moves associated with the board
+            if tokens.len() > move_start && tokens[move_start] == "moves" {
+                for i in (move_start+1)..tokens.len() {
                     move_str.push_str(tokens[i]);
                     move_str.push_str(" ");
                 }
-                self.engine.set_board_state(&move_str);
             }
+
+            // Set the board state
+            self.engine.set_board_state(&fen_str, &move_str);
         }
     }
 
@@ -123,6 +141,11 @@ impl UCI {
             println!("Invalid go parameters; ignoring");
         }
 
+    }
+
+    // Extra (non-UCI) print command for debuging
+    fn print_board(&self) {
+        self.engine.print_board();
     }
 
     // Process an unknown commabd

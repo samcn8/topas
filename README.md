@@ -22,11 +22,18 @@ Topas Chess is named after "Topas", one of my children's hermit crabs.  Topas es
 
 ## UCI Support
 
-TBD
+The following UCI commands are supported:
+ * `uci`: Tell the engine to use UCI mode.  Response will be `uciok`.
+ * `isready`: Asks the engine if it is ready to process more commands.  Response will be `readyok`.
+ * `ucinewgame`: Tell the engine that a new game is starting.  This should be sent before a `position` command if a new game is starting, so the engine can clear or reset any stored state.  There is no response to this command.
+ * `position`.  Used like `position [fen <fenstring> | startpos ]  moves <move1> .... <movei>`: Tell the engine to set up the position described in `fenstring`, or set up the starting position if `startpos` is provided.  Then play the moves given in long algebraic notation.  There is no response to this command.
+ * `go`.  Tell the engine to start calculated on the position provided by `position`.  Supported parameters include `depth` (maximum search depth), `wtime` and `btime` (white and black time remaining in milliseconds), and `winc` and `binc` (white and black time increments in milliseconds per the time controls of the game).  For example, `go depth 7 wtime 169604 winc 3000 btime 182062 binc 3000` tells the engine to search with a max depth of 7, considering that white has ~170 seconds left and black as ~182 seconds left, and both players have time increments of 3 seconds per move.  Response will be `bestmove <move>` when the search is over.  For example, `bestmove g5h4` indicates that the engine believes g5h4 is the best move.  Note that while the engine is searching it may send `info` messages.  For example, `info depth 3 score cp 104 nodes 2187 time 12 pv d1e1 a8d8 b1c3` is a status message indicating that the engine has just seached to depth 3, searching 2187 positions in 12 milliseconds, believes that the current player is winning by 104 centipawns, and believes the principal variation (best continuation) is d1e1 a8d8 b1c3.  Status messages do not indicate that the engine is done searching, only that it has a status update to send.
+ * `quit`: Quits the program as soon as possible.
+ * `print` (custom, non-UCI message): Tells the engine to print the state of the board to the screen.
 
 ## Building
 
-To build Topas Chess, you need the Rust compiler suite.  Instructions for installing Rust (with Cargo) are found here: https://www.rust-lang.org/learn/get-started.
+To build Topas Chess, you need Rust.  Instructions for installing Rust (with Cargo) are found here: https://www.rust-lang.org/learn/get-started.
 
 After Rust is installed, you can build using `cargo` like this:
 
@@ -36,13 +43,13 @@ cargo build --release
 
 Note that it is important to build with the `-release` flag, which will signficantly improve the performance of the engine.
 
-## Contributing - Not currently accepting pull requests
+## Contributing
 
-This is a personal hobby project and something I enjoy tickering with in my free time.  I'm not currently accepting issues or pull requests.  However, you are free to use the code in your own engine development in accordance with the [GNU General Public License version 3](LICENSE) (GPL v3).  Enjoy!
+Since this is just a personal hobby project, I'm not currently accepting issues or pull requests.  However, you are free to use the code in your own engine development in accordance with the [GNU General Public License version 3](LICENSE) (GPL v3).
 
 ## Acknowledgements
 
-Throughout the course of this project, I scoured the Internet for information related to searching, evaluation, and other chess-related algorithms.  A few of the key resources that helped me understand core concepts the most were:
+Throughout the course of this project, I read a lot of information related to searching, evaluation, and other chess-related algorithms.  A few of the key resources that helped me understand core concepts the most were:
  * The Chess Programming Wiki: https://www.chessprogramming.org/Main_Page
  * Wikipedia (which has great pseudo-code examples): https://www.wikipedia.org
  * The Mediocre Chess blog: http://mediocrechess.blogspot.com

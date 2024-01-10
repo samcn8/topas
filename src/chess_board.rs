@@ -16,6 +16,9 @@ use crate::bitboard;
 use crate::zobrist;
 use crate::pieces;
 
+// FEN for the starting position
+pub const STARTFEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
 // Convert a file in 0-7 and rank in 0-7 to a square ID
 pub fn file_rank_to_square(file: usize, rank: usize) -> usize {
     rank * 8 + file
@@ -122,11 +125,56 @@ impl ChessBoard {
         }
     }
 
-    // Set / reset the game state to the starting point.
+    // Set / reset the game from the starting position
     pub fn new_game(&mut self) {
+        self.new_game_from_fen(STARTFEN);
+    }
 
-        // Reset all piece bitboards to the initial game state
-        self.bb_pieces[pieces::COLOR_WHITE][pieces::PAWN] = 0x000000000000FF00;
+    // Set / reset the game state to the starting point listed in the
+    // FEN string (see https://en.wikipedia.org/wiki/Forsyth–Edwards_Notation)
+    pub fn new_game_from_fen(&mut self, fen_str: &str) {
+
+        // Get the 6 components of the FEN string
+        let tokens: Vec<&str> = fen_str.split_whitespace().collect();
+        if tokens.len() != 6 {
+            panic!("Invalid FEN string: {}", fen_str);
+        }
+
+        // Component 1: Piece placement
+        let piece_tokens: Vec<&str> = tokens[0].split('/').collect();
+        if piece_tokens.len() != 8 {
+            panic!("Invalid FEN string: {}", fen_str);
+        }
+        for color in 0..2 {
+            for piece in 0..6 {
+                self.bb_pieces[color][piece] = 0;
+            }
+        }
+        for (i, file_str) in piece_tokens.iter().enumerate() {
+            let mut square = (7-i)*8;
+            for c in file_str.chars() {
+                if c.is_digit(10) {
+                    if let Some(d) = c.to_digit(10) {
+                        square += d as usize;
+                    } else {
+                        panic!("Invalid FEN string: {}", fen_str);
+                    }
+                } else if c.is_lowercase() {
+                    let piece = pieces::PIECE_ID_TO_CHAR[pieces::COLOR_BLACK].iter().position(|&r| r == c).unwrap();
+                    self.bb_pieces[pieces::COLOR_BLACK][piece] |= bitboard::to_bb(square);
+                    square += 1;
+                } else if c.is_uppercase() {
+                    let piece = pieces::PIECE_ID_TO_CHAR[pieces::COLOR_WHITE].iter().position(|&r| r == c).unwrap();
+                    self.bb_pieces[pieces::COLOR_WHITE][piece] |= bitboard::to_bb(square);
+                    square += 1;
+                } else {
+                    panic!("Invalid FEN string: {}", fen_str);
+                }
+            }
+        }
+
+        // Reset all piece bitboards to the given game state
+        /*self.bb_pieces[pieces::COLOR_WHITE][pieces::PAWN] = 0x000000000000FF00;
         self.bb_pieces[pieces::COLOR_WHITE][pieces::KNIGHT] = 0x0000000000000042;
         self.bb_pieces[pieces::COLOR_WHITE][pieces::BISHOP] = 0x0000000000000024;
         self.bb_pieces[pieces::COLOR_WHITE][pieces::ROOK] = 0x0000000000000081;
@@ -137,7 +185,7 @@ impl ChessBoard {
         self.bb_pieces[pieces::COLOR_BLACK][pieces::BISHOP] = 0x2400000000000000;
         self.bb_pieces[pieces::COLOR_BLACK][pieces::ROOK] = 0x8100000000000000;
         self.bb_pieces[pieces::COLOR_BLACK][pieces::QUEEN] = 0x0800000000000000;
-        self.bb_pieces[pieces::COLOR_BLACK][pieces::KING] = 0x1000000000000000;
+        self.bb_pieces[pieces::COLOR_BLACK][pieces::KING] = 0x1000000000000000;*/
 
         // Reset side and occupied bitboards
         for c in 0..2 {
@@ -149,17 +197,55 @@ impl ChessBoard {
         self.bb_occupied_squares = self.bb_side[pieces::COLOR_WHITE] | self.bb_side[pieces::COLOR_BLACK];
         self.bb_empty_squares = !self.bb_occupied_squares;
 
+        // Component 2: Turn
+        if tokens[1] == "w" {
+            self.whites_turn = true;
+        } else if tokens[1] == "b" {
+            self.whites_turn = false;
+        } else {
+            panic!("Invalid FEN string: {}", fen_str);
+        }
+
+        // Component 3: Castling rights
+        self.white_ks_castling_rights = false;
+        self.white_qs_castling_rights = false;
+        self.black_ks_castling_rights = false;
+        self.black_qs_castling_rights = false;
+        if tokens[2].contains("K") {
+            self.white_ks_castling_rights = true;
+        }
+        if tokens[2].contains("Q") {
+            self.white_qs_castling_rights = true;
+        }
+        if tokens[2].contains("k") {
+            self.black_ks_castling_rights = true;
+        }
+        if tokens[2].contains("q") {
+            self.black_qs_castling_rights = true;
+        }
+
+        // Component 4: En passant target square
+        // TODO - we represent en passant rights only if a legal en passant
+        // capture is possible.  However, the older (and more common) FEN
+        // notation adds the en passant target square if a pawn moves two
+        // spaces, regardless if an en passant capture is possible.  We
+        // have to reconcile this before we can use this information.
+        self.en_passant_rights = None;
+
+        // Component 5: Halfmove clock
+        // TODO
+
+        // Component 6: Fullmove number
+        // TODO
+
         // Reset the rest of the state
         self.move_history.clear();
         self.zobrist_history.clear();
-        self.whites_turn = true;
-        self.white_ks_castling_rights = true;
-        self.white_qs_castling_rights = true;
-        self.black_ks_castling_rights = true;
-        self.black_qs_castling_rights = true;
+        // TODO: We don't have enough information to determine whether
+        // castling has occured.  This is currently only used in the
+        // evaluation factor; consider an alternate evaluation approach.
         self.white_castled = false;
         self.black_castled = false;
-        self.en_passant_rights = None;
 
         // Reset the Zobrist hash
         self.zobrist_hash = self.zobrist_hasher.full_hash(self);

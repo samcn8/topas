@@ -20,7 +20,7 @@ use crate::pieces;
 use crate::bitboard;
 
 // Default number of TT entries
-const DEFAULT_NUM_TT_ELEMENTS: usize = 10000000;
+const DEFAULT_NUM_TT_ELEMENTS: usize = 100000000;
 
 // Scores for terminal states and infinity
 const CHECKMATE_VALUE: i32 = 50000;
@@ -208,17 +208,18 @@ impl SearchEngine {
 
     // Sets the position of the board.  Since the UCI protocol is stateless,
     // we'll typically reset the board state after each search.
+    // The fen string is in FEN format.  See:
+    // https://en.wikipedia.org/wiki/Forsyth–Edwards_Notation
     // The move string is in long algebraic notation without piece names,
     // with spaces between each move, as dictated by the UCI protocol.
     // move.  For instance, "e2e4 b8c6".  Promotion looks like "f7f8q".
-    // TODO: Handle FEN string input if not starting at the start position.
-    pub fn set_board_state(&mut self, move_str: &str) {
+    pub fn set_board_state(&mut self, fen_str: &str, move_str: &str) {
 
         // Get the list of moves passed in
         let moves = movegen::convert_moves_str_into_list(move_str);
 
         // Start the board at a given starting position
-        self.board.new_game();
+        self.board.new_game_from_fen(fen_str);
 
         // Play out the provided moves
         for (start_square, end_square) in moves {
@@ -234,6 +235,11 @@ impl SearchEngine {
     // Returns the color of the player to move
     pub fn color_turn(&self) -> usize {
         if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK}
+    }
+
+    // Prints the board, for debugging purposes
+    pub fn print_board(&self) {
+        self.board.print_debug();
     }
 
     // This returns a priority bonus for move ordering if the move is

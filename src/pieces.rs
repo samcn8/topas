@@ -19,7 +19,7 @@ pub const PIECE_ID_TO_CHAR: [[char; 6]; 2] = [['P', 'N', 'B', 'R', 'Q', 'K'],
 // the piece constants listed above)
 // See https://www.chessprogramming.org/PeSTO%27s_Evaluation_Function
 pub const PIECE_VALUES_MG: [i32; 6] = [82, 337, 365, 477, 1025, 20000];
-pub const PIECE_VALUES_EG: [i32; 6] = [94, 281, 297, 512,  936,  0];
+pub const PIECE_VALUES_EG: [i32; 6] = [94, 281, 297, 512, 936, 20000];
 
 // Most valuable victom / least valuable attacker (MVV-LVA).  This is used
 // for ordering capture moves.  Higher numbers result in higher
