@@ -32,11 +32,12 @@ const INF: i32 = 100000000;
 // usually discovered on the previous iterative deepening loop.
 // Moves that lead to a beta cutoff are also very valuable as they
 // can signficantly decrease the search space.  Promotions and
-// captures are valuable, followed by quiet moves.
-const PV_MOVE_PRIORITY_BONUS: i32 = 400;
-const CUTOFF_PRIORITY_BONUS: i32 = 300;
-const PROMOTION_PRIORITY_BONUS: i32 = 200;
-const CAPTURE_PRIORITY_BONUS: i32 = 100;
+// captures are valuable, followed by killer moves.
+const PV_MOVE_PRIORITY_BONUS: i32 = 500;
+const CUTOFF_PRIORITY_BONUS: i32 = 400;
+const PROMOTION_PRIORITY_BONUS: i32 = 300;
+const CAPTURE_PRIORITY_BONUS: i32 = 200;
+const KILLER_MOVE_BONUS: i32 = 100;
 
 // Piece values in centipawns used in static exchange evaluation (SEE)
 // Indexed by PNBRQK position.
@@ -151,6 +152,13 @@ pub struct SearchEngine {
 
     // The transposition table.
     transposition_table: Vec<Option<TTEntry>>,
+
+    // Killer moves, indexed by ply
+    primary_killers: [Option<(u8, u8)>; 100],
+    secondary_killers: [Option<(u8, u8)>; 100],
+
+    // Max depth we were instructed to search to
+    max_depth_for_search: u8,
     
     // The stored best move from the last iteration
     // Represents (start square, end square)
@@ -181,6 +189,9 @@ impl SearchEngine {
             board: chess_board::ChessBoard::new(),
             num_tt_entries: DEFAULT_NUM_TT_ELEMENTS,
             transposition_table: Vec::new(),
+            primary_killers: [None; 100],
+            secondary_killers: [None; 100],
+            max_depth_for_search: 0,
             best_move_from_last_iteration: None,
             moves_analyzed: 0,
             time_max_for_move: 0,
@@ -498,8 +509,11 @@ impl SearchEngine {
 
     // This sorts moves, in place, with the highest priority moves first.
     // Priority from high to low is: (1) PV moves, (2) moves that cause
-    // a beta cut-off, (3) captures, sorted by MVV-LVA, and (4) quiet moves.
-    fn sort_moves(&self, moves: &mut Vec<movegen::ChessMove>) {
+    // a beta cut-off, (3) captures, sorted by MVV-LVA, (4) killer moves,
+    // and (5) all other moves.  Note that if ply is not provided, then
+    // the caller is indicating they don't want to use killer moves in
+    // sorting -- this happens in quiesce search where only captures matter.
+    fn sort_moves(&self, moves: &mut Vec<movegen::ChessMove>, ply: Option<u8>) {
 
         // Assign a priority to all moves
         for m in moves.iter_mut() {
@@ -507,14 +521,20 @@ impl SearchEngine {
             // Check the transposition table for PV and cut-off moves
             let mut priority = self.get_move_priority_bonus(m.start_square, m.end_square);
 
-            // Check for promotions
-            if m.piece == pieces::PAWN && (m.end_square / 8 == 0 || m.end_square / 8 == 7) {
-                priority += PROMOTION_PRIORITY_BONUS;
-            }
+            if priority == 0 {
 
-            // Check for captures, and prioritize based on MVV-LVA
-            if let Some(cap) = m.captured_piece {
-                priority += CAPTURE_PRIORITY_BONUS + pieces::MVV_LVA[cap][m.piece];
+                // Check for promotions, captures, and killer moves
+                if m.piece == pieces::PAWN && (m.end_square / 8 == 0 || m.end_square / 8 == 7) {
+                    priority += PROMOTION_PRIORITY_BONUS;
+                } else if let Some(cap) = m.captured_piece {
+                    priority += CAPTURE_PRIORITY_BONUS + pieces::MVV_LVA[cap][m.piece];
+                } else if let Some(ply_val) = ply {
+                    let cur_move = Some((m.start_square as u8, m.end_square as u8));
+                    if cur_move == self.primary_killers[ply_val as usize] || cur_move == self.secondary_killers[ply_val as usize] {
+                        priority = KILLER_MOVE_BONUS;
+                    }
+                }
+
             }
 
             // Set priority
@@ -574,7 +594,7 @@ impl SearchEngine {
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color);
         movegen::retain_only_legal_moves(&mut self.board, &mut moves);
-        self.sort_moves(&mut moves);
+        self.sort_moves(&mut moves, None);
 
         // Check for checkmate and stalemate
         if moves.len() == 0 {
@@ -680,11 +700,14 @@ impl SearchEngine {
             return self.quiesce(alpha, beta);
         }
 
+        // Compute ply
+        let ply = self.max_depth_for_search - depth + 1;
+
         // Generate all legal moves to search
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color);
         movegen::retain_only_legal_moves(&mut self.board, &mut moves);
-        self.sort_moves(&mut moves);
+        self.sort_moves(&mut moves, Some(ply));
 
         // Check for checkmate and stalemate
         if moves.len() == 0 {
@@ -720,6 +743,19 @@ impl SearchEngine {
             // Check for a beta cut-off
             alpha = cmp::max(alpha, value);
             if alpha >= beta {
+
+                // This move was strong enough to cause a beta cut-off, so
+                // store it as a "killer move", which will be a high ranking
+                // move to try during future move ordering calls.  If there
+                // is already a killer move, shift it over so that we store
+                // at most two.  Note that we don't store capture moves as
+                // killer moves because they are sorted seperately.
+                let cur_move = Some((m.start_square as u8, m.end_square as u8));
+                if m.captured_piece.is_none() && cur_move != self.primary_killers[ply as usize] {
+                    self.secondary_killers[ply as usize] = self.primary_killers[ply as usize];
+                    self.primary_killers[ply as usize] = cur_move;
+                }
+
                 break;
             }
 
@@ -786,12 +822,12 @@ impl SearchEngine {
     // This uses self.board as the current state of the board to search from.
     // This uses an iterative deepening search.  The PV move found in the
     // previous iteration is the first searched node in the next iteration.
-    pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32) -> Option<BestMoveInformation> {
+    pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32) {
 
         // Ensure we're either using depth or time as a limiter
         if max_depth == 0 && time_available <= 0 {
             println!("Search must be limited by depth or time; ignoring");
-            return None;
+            return;
         }
 
         // Sanity check on transposition tables.  Note that the user should
@@ -805,7 +841,7 @@ impl SearchEngine {
 
         // If depth is 0, then we're not using depth as a limiter
         if max_depth == 0 {
-            max_depth = 250;
+            max_depth = 99;
         }
 
         // If time_available is greater than 0, then we're using
@@ -840,6 +876,9 @@ impl SearchEngine {
 
             // Timing
             let start_time_iteration = time::Instant::now();
+
+            // Store the max depth for this search
+            self.max_depth_for_search = depth;
 
             // Find the best move using negamax
             value = self.negamax(depth, -INF, INF, true);
@@ -884,6 +923,9 @@ impl SearchEngine {
         self.halt_time_over = false;
         self.time_max_for_move = 0;
         self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
+        self.primary_killers = [None; 100];
+        self.secondary_killers = [None; 100];
+        self.max_depth_for_search = 0;
 
         // Provide the best move to the caller
         let mut bm = String::from("0000");
@@ -894,7 +936,6 @@ impl SearchEngine {
             }
         }
         println!("bestmove {}", bm);
-        last_iteration_info
 
     }
 
@@ -979,6 +1020,9 @@ mod tests {
             board,
             num_tt_entries: 0,
             transposition_table: Vec::new(),
+            primary_killers: [None; 100],
+            secondary_killers: [None; 100],
+            max_depth_for_search: 0,
             best_move_from_last_iteration: None,
             moves_analyzed: 0,
             time_max_for_move: 0,
@@ -1022,6 +1066,9 @@ mod tests {
             board,
             num_tt_entries: 0,
             transposition_table: Vec::new(),
+            primary_killers: [None; 100],
+            secondary_killers: [None; 100],
+            max_depth_for_search: 0,
             best_move_from_last_iteration: None,
             moves_analyzed: 0,
             time_max_for_move: 0,

@@ -136,7 +136,7 @@ impl UCI {
         // Ensure we're either using depth or time as a bound, else
         // we'll never end.
         if depth > 0 || my_time > 0 {
-            self.engine.find_best_move(depth, my_time, my_inc).unwrap();
+            self.engine.find_best_move(depth, my_time, my_inc);
         } else {
             println!("Invalid go parameters; ignoring");
         }
