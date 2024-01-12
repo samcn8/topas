@@ -932,7 +932,19 @@ impl SearchEngine {
         if let Some(info) = &last_iteration_info {
             if let Some((move_start, move_end)) = info.best_move_from_last_iteration {
                 let move_vec = vec!((move_start, move_end));
-                bm = movegen::convert_move_list_to_lan(&move_vec);
+                bm = String::from(movegen::convert_move_list_to_lan(&move_vec).trim());
+                
+                // If this is a pawn promotion, we have to append the promoted
+                // character.
+                // TODO: Allow promotions to pieces other than queens.
+                if move_end >= 56 || move_end <= 7 {
+                    if let Some((_,p)) = self.board.get_color_and_piece_on_square(move_start as usize) {
+                        if p == pieces::PAWN {
+                            bm.push('q');
+                        }
+                    }
+                }
+
             }
         }
         println!("bestmove {}", bm);
