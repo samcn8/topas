@@ -234,8 +234,8 @@ impl SearchEngine {
         self.board.new_game_from_fen(fen_str);
 
         // Play out the provided moves
-        for (start_square, end_square) in moves {
-            self.board.make_move(start_square, end_square);
+        for (start_square, end_square, promotion) in moves {
+            self.board.make_move(start_square, end_square, promotion);
         }
 
         // Reset other state
@@ -773,7 +773,7 @@ impl SearchEngine {
             }
 
             // Make the move
-            self.board.make_move(m.start_square, m.end_square);
+            self.board.make_move(m.start_square, m.end_square, None);
 
             // Recursively search on the new board state
             let score_for_move = -self.quiesce(-beta, -alpha);
@@ -876,7 +876,7 @@ impl SearchEngine {
         for m in moves.iter() {
 
             // Make the move
-            self.board.make_move(m.start_square, m.end_square);
+            self.board.make_move(m.start_square, m.end_square, None);
 
             // Recursively search on the new board state
             let score_for_move = -self.negamax(depth - 1, -beta, -alpha, false);
@@ -1002,7 +1002,7 @@ impl SearchEngine {
                             }
                             
                             pv_line.push((move_start, move_end, promotion));
-                            self.board.make_move(move_start as usize, move_end as usize);
+                            self.board.make_move(move_start as usize, move_end as usize, None);
                             moves_made += 1;
                         }
                     } else {

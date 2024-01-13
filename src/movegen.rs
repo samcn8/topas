@@ -50,15 +50,22 @@ pub fn convert_move_list_to_lan(moves: &Vec<(u8, u8, Option<usize>)>) -> String 
 }
 
 // Converts a UCI-style move list (long algebraic notation without
-// piece names) into a vector of (start square, end square) tuples.
-pub fn convert_moves_str_into_list(move_str: &str) -> Vec<(usize, usize)> {
+// piece names) into a vector of (start square, end square, optional promotion
+// piece) tuples.
+pub fn convert_moves_str_into_list(move_str: &str) -> Vec<(usize, usize, Option<usize>)> {
     let mut moves = Vec::new();
     for m in move_str.split_whitespace() {
         let start_square = convert_square_str_into_id(&m[0..2]);
         let end_square = convert_square_str_into_id(&m[2..4]);
-        // TODO - handle a potential 5th character indicating a promoted
-        //        piece type; right now, this assumes a queen
-        moves.push((start_square, end_square));
+        let mut promotion = None;
+        // Check for a 5th character which indicates the promotion piece
+        if m.len() >= 5 {
+            let c = m.chars().nth(4).unwrap();
+            // Note that UCI promotions are always lower case
+            let piece = pieces::PIECE_ID_TO_CHAR[pieces::COLOR_BLACK].iter().position(|&r| r == c).unwrap();
+            promotion = Some(piece);
+        }
+        moves.push((start_square, end_square, promotion));
     }
     moves
 }
@@ -263,7 +270,7 @@ pub fn retain_only_legal_moves(board: &mut chess_board::ChessBoard, moves: &mut 
         }
 
         // Ensure the king is not in check after the move is made
-        board.make_move(i.start_square, i.end_square);
+        board.make_move(i.start_square, i.end_square, None);
         let keepit = !is_king_in_check(board, my_color);
         board.unmake_move();
         keepit
@@ -384,7 +391,7 @@ mod tests {
         let mut moves = generate_all_psuedo_legal_moves(&board, my_color);
         retain_only_legal_moves(board, &mut moves);
         for m in moves.iter() {
-            board.make_move(m.start_square, m.end_square);
+            board.make_move(m.start_square, m.end_square, None);
             move_count += get_number_of_valid_moves(board, depth - 1);
             board.unmake_move();
         }
@@ -409,8 +416,8 @@ mod tests {
     fn test_capture() {
         let mut board = ChessBoard::new();
         board.new_game();
-        board.make_move(12, 28); // e4
-        board.make_move(51, 35); // d5
+        board.make_move(12, 28, None); // e4
+        board.make_move(51, 35, None); // d5
         let mut moves = generate_all_psuedo_legal_moves(&board, pieces::COLOR_WHITE);
         retain_only_legal_moves(&mut board, &mut moves);
         let mut captures = 0;

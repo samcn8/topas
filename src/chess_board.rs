@@ -45,6 +45,9 @@ struct MoveRecord {
     // If a promotion occured, this is the promotion square
     promotion_square: Option<usize>,
 
+    // If a promotion occured, this is the new piece
+    promotion_piece: Option<usize>,
+
     // Game state from before the move, for unmake_move purposes
     prior_white_ks_castling_rights: bool,
     prior_white_qs_castling_rights: bool,
@@ -242,10 +245,9 @@ impl ChessBoard {
     // that the move has already been verified to be legal.  This function
     // will be called a large number of times during a search, and so the
     // performance of this function is critical to the speed of the engine.
-    // IMPORTANT: The caller must ensure moves are legal.  If illegal moves
-    // are passed into this function, the program may crash/panic or have
-    // corrupt board state.
-    pub fn make_move(&mut self, start_square: usize, end_square: usize) {
+    // NOTE: if None is passed in as the promotion piece, and a promotion
+    // is required by the move, then this will assume a queen promotion.
+    pub fn make_move(&mut self, start_square: usize, end_square: usize, promotion_piece: Option<usize>) {
 
         // Get rank (0-7) and file (0-7) for important squares
         let start_rank = start_square / 8;
@@ -294,6 +296,7 @@ impl ChessBoard {
             captured_piece,
             is_en_passant,
             promotion_square,
+            promotion_piece,
             prior_white_ks_castling_rights: self.white_ks_castling_rights,
             prior_white_qs_castling_rights: self.white_qs_castling_rights,
             prior_black_ks_castling_rights: self.black_ks_castling_rights,
@@ -380,12 +383,15 @@ impl ChessBoard {
         // will have been updated already, with the pawn on the promotion
         // square.  Therefore, we don't have to change the bb_side or
         // bb_occupied_squares bitboards.
-        // TODO: Allow for promotions to pieces other than queens
         if promotion_square.is_some() {
+            // TODO: Be more explicit about queen promotions; this currently
+            // will assume the caller wants a queen promotion if not otherwise
+            // specified.
+            let pp = if let Some(s) = promotion_piece {s} else {pieces::QUEEN};
             self.bb_pieces[my_color][pieces::PAWN] ^= to_bb;
-            self.bb_pieces[my_color][pieces::QUEEN] ^= to_bb;
+            self.bb_pieces[my_color][pp] ^= to_bb;
             self.zobrist_hash ^= self.zobrist_hasher.hash_piece[end_square][my_color][pieces::PAWN];
-            self.zobrist_hash ^= self.zobrist_hasher.hash_piece[end_square][my_color][pieces::QUEEN];
+            self.zobrist_hash ^= self.zobrist_hasher.hash_piece[end_square][my_color][pp];
         } 
 
         // If this was a castling move, we now have to take care to move
@@ -611,10 +617,14 @@ impl ChessBoard {
         // Undo any promotion.  For this step, we just change the queen back
         // to a pawn (we don't change it's board location yet).
         if let Some(p) = last_move.promotion_square {
+            // TODO: Be more explicit about queen promotions; this currently
+            // will assume the caller wants a queen promotion if not otherwise
+            // specified.
+            let pp = if let Some(s) = last_move.promotion_piece {s} else {pieces::QUEEN};
             self.bb_pieces[my_color][pieces::PAWN] ^= to_bb;
-            self.bb_pieces[my_color][pieces::QUEEN] ^= to_bb;
+            self.bb_pieces[my_color][pp] ^= to_bb;
             self.zobrist_hash ^= self.zobrist_hasher.hash_piece[p][my_color][pieces::PAWN];
-            self.zobrist_hash ^= self.zobrist_hasher.hash_piece[p][my_color][pieces::QUEEN];
+            self.zobrist_hash ^= self.zobrist_hasher.hash_piece[p][my_color][pp];
         }
 
         // Handle potential captures
@@ -667,7 +677,7 @@ impl ChessBoard {
             }
         }
         None
-        
+
     }
 
     // Print the board
@@ -726,18 +736,24 @@ impl ChessBoard {
 #[cfg(test)]
 mod tests {
 
+    use crate::pieces;
+
     use super::ChessBoard;
 
     #[test]
     fn test_make_and_unmake_move() {
-        // 1. e4 d5 2. exd5 c5 3. dxc6 Nf6 4. c7 e5 5. a4 Ba3 6. Rxa3 O-O 7. cxb8=Q Rxb8
+        // 1. e4 d5 2. exd5 c5 3. dxc6 Nf6 4. c7 e5 5. a4 Ba3 6. Rxa3 O-O 7. cxb8=N Rxb8
         let test_game = [(12, 28), (51, 35), (28, 35), (50, 34), (35, 42), (62, 45), (42, 50), (52, 36), (8, 24), (61, 16), (0, 16), (60, 62), (50, 57), (56, 57)];
         let mut board = ChessBoard::new();
         board.new_game();
         let initial_hash = board.zobrist_hash;
         // Make moves, checking hashes
         for (start_square, end_square) in test_game {
-            board.make_move(start_square, end_square);
+            if (start_square, end_square) == (50, 57) {
+                board.make_move(start_square, end_square, Some(pieces::KNIGHT));
+            } else {
+                board.make_move(start_square, end_square, None);
+            }
             assert_eq!(board.zobrist_hash, board.zobrist_hasher.full_hash(&board));
         }
         // Unmake moves, checking hashes
