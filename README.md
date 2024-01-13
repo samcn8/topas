@@ -2,15 +2,17 @@
 
 Topas Chess is an open source UCI chess engine written in Rust with a focus on clean, readable code.
 
+Benchmarking against Elo-limited games with Stockfish, Topas Chess is estimated to have an Elo between 2250 and 2300.
+
 ## Overview
 
-Topas Chess is a "from scratch" implementation I created as a hobby project with the goal of learning more about chess algorithms and Rust programming in general.  My goal was to create clean, readable code that was well-documented.
+Topas Chess is a "from scratch" implementation I created as a hobby project with the goal of learning more about chess algorithms and Rust programming in general.
 
-Note that Topas Chess does not contain a GUI; the only way to interact with it is via the Universal Chess Interface (UCI) protocol.
+Note that Topas Chess is a command line program and does not contain a GUI; the only way to interact with it is via the Universal Chess Interface (UCI) protocol.  It is recommended that users use their favorite UCI-speaking chess GUI to play against Topas Chess.
 
 The following features are implemented:
- * Universal Chess Interface (UCI) support
- * Chess board representation using bitboards
+ * Universal Chess Interface (UCI) support, described below
+ * Chess board representation and fast attack/movement patterns using bitboards
  * Negamax with alpha-beta pruning to efficiently search to a configurable depth
  * Iterative deepening to allow for more efficient move ordering and time management
  * Transposition tables (with Zobrist hashing) for fast lookup and enhanced move ordering
@@ -41,7 +43,7 @@ After Rust is installed, you can build using `cargo` like this:
 cargo build --release
 ```
 
-Note that it is important to build with the `-release` flag, which will signficantly improve the performance of the engine.
+Note that it is important to build with the `--release` flag, which will signficantly improve the performance of the engine.
 
 ## Contributing
 
