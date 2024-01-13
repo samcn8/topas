@@ -29,7 +29,7 @@ pub struct ChessMove {
 }
 
 // Converts a list of moves to long algebraic notation
-pub fn convert_move_list_to_lan(moves: &Vec<(u8, u8)>) -> String {
+pub fn convert_move_list_to_lan(moves: &Vec<(u8, u8, Option<usize>)>) -> String {
     let mut lan_str = String::new();
     for m in moves.iter() {
         let rank_start = (m.0 / 8 + 1).to_string();
@@ -40,6 +40,9 @@ pub fn convert_move_list_to_lan(moves: &Vec<(u8, u8)>) -> String {
         lan_str.push_str(&rank_start);
         lan_str.push_str(&file_end);
         lan_str.push_str(&rank_end);
+        if let Some(p) = m.2 {
+            lan_str.push_str(pieces::PIECE_ID_TO_CHAR[pieces::COLOR_BLACK][p].to_string().as_str());
+        }
         lan_str.push_str(" ");
     }
     lan_str

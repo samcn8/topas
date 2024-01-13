@@ -105,20 +105,17 @@ pub fn static_evaluation_phase(board: &chess_board::ChessBoard, is_end_game: boo
                 
                 // The PST's are from white's perspective, so we have to flip
                 // the look up for black
-                let rank = square / 8;
-                let file = square % 8;
-                let black_pst_square = (7 - rank) * 8 + (7 - file);
                 if is_end_game {
                     if color == pieces::COLOR_WHITE {
                         totals[color] += pieces::PIECE_VALUES_EG[piece] + pieces::PST_END_GAME[piece][square];
                     } else {
-                        totals[color] += pieces::PIECE_VALUES_EG[piece] + pieces::PST_END_GAME[piece][black_pst_square];
+                        totals[color] += pieces::PIECE_VALUES_EG[piece] + pieces::PST_END_GAME[piece][square ^ 56];
                     }
                 } else {
                     if color == pieces::COLOR_WHITE {
                         totals[color] += pieces::PIECE_VALUES_MG[piece] + pieces::PST_MIDDLE_GAME[piece][square];
                     } else {
-                        totals[color] += pieces::PIECE_VALUES_MG[piece] + pieces::PST_MIDDLE_GAME[piece][black_pst_square];
+                        totals[color] += pieces::PIECE_VALUES_MG[piece] + pieces::PST_MIDDLE_GAME[piece][square ^ 56];
                     }
                 }
             }

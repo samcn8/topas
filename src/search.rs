@@ -135,8 +135,8 @@ pub struct BestMoveInformation {
     // Time in milliseconds that it took to find this move
     pub duration_of_search: u128,
 
-    // The PV line computed
-    pub pv_line: Vec<(u8, u8)>,
+    // The PV line computed (start square, end square, promotion piece if it exists)
+    pub pv_line: Vec<(u8, u8, Option<usize>)>,
 
 }
 
@@ -931,19 +931,20 @@ impl SearchEngine {
         let mut bm = String::from("0000");
         if let Some(info) = &last_iteration_info {
             if let Some((move_start, move_end)) = info.best_move_from_last_iteration {
-                let move_vec = vec!((move_start, move_end));
-                bm = String::from(movegen::convert_move_list_to_lan(&move_vec).trim());
                 
-                // If this is a pawn promotion, we have to append the promoted
-                // character.
+                // If pawn promotion, add the promotion piece
                 // TODO: Allow promotions to pieces other than queens.
+                let mut promotion = None;
                 if move_end >= 56 || move_end <= 7 {
                     if let Some((_,p)) = self.board.get_color_and_piece_on_square(move_start as usize) {
                         if p == pieces::PAWN {
-                            bm.push('q');
+                            promotion = Some(pieces::QUEEN);
                         }
                     }
                 }
+            
+                let move_vec = vec!((move_start, move_end, promotion));
+                bm = movegen::convert_move_list_to_lan(&move_vec);
 
             }
         }
@@ -952,7 +953,7 @@ impl SearchEngine {
     }
 
     // Extract the PV line from the transposition table
-    fn extract_pv_line(&mut self) -> Vec<(u8, u8)> {
+    fn extract_pv_line(&mut self) -> Vec<(u8, u8, Option<usize>)> {
         let mut pv_line = Vec::new();
         let mut moves_made = 0;
         let mut zobrist_loop_detect = Vec::new();
@@ -962,10 +963,22 @@ impl SearchEngine {
                 if tt_entry.valid && tt_entry.zobrist_hash == self.board.zobrist_hash && !zobrist_loop_detect.contains(&tt_entry.zobrist_hash) {
                     if let TTFlag::Exact = tt_entry.flag {
                         zobrist_loop_detect.push(tt_entry.zobrist_hash);
-                        // TODO check to make sure this best move is legal
-                        if let Some(bm) = tt_entry.best_move {
-                            pv_line.push(bm);
-                            self.board.make_move(bm.0 as usize, bm.1 as usize);
+                        // TODO do we have to check to make sure this best move is legal?
+                        if let Some((move_start, move_end)) = tt_entry.best_move {
+
+                            // If pawn promotion, add the promotion piece
+                            // TODO: Allow promotions to pieces other than queens.
+                            let mut promotion = None;
+                            if move_end >= 56 || move_end <= 7 {
+                                if let Some((_,p)) = self.board.get_color_and_piece_on_square(move_start as usize) {
+                                    if p == pieces::PAWN {
+                                        promotion = Some(pieces::QUEEN);
+                                    }
+                                }
+                            }
+                            
+                            pv_line.push((move_start, move_end, promotion));
+                            self.board.make_move(move_start as usize, move_end as usize);
                             moves_made += 1;
                         }
                     } else {
