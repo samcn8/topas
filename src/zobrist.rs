@@ -20,14 +20,14 @@ pub struct ZobristHasher {
     pub hash_black_ks_castling_rights: u64,
     pub hash_black_qs_castling_rights: u64,
 
-    // Has applied for the en passant square.  Note that we only have
+    // Hash applied for the en passant square.  Note that we only have
     // to apply the file to make this disambiguous (so, 8 total values).
     pub hash_en_passant: [u64; 8],
 }
 
 impl ZobristHasher {
 
-    // Construct a stack-allocated ZobristHasher
+    // Construct a ZobristHasher
     pub fn new() -> ZobristHasher {
 
         // Initialize everything with random values

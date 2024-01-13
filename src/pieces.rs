@@ -9,9 +9,11 @@ pub const ROOK: usize = 3;
 pub const QUEEN: usize = 4;
 pub const KING: usize = 5;
 
+// Constants for identifying colors
 pub const COLOR_WHITE: usize = 0;
 pub const COLOR_BLACK: usize = 1;
 
+// Piece and color IDs to characters
 pub const PIECE_ID_TO_CHAR: [[char; 6]; 2] = [['P', 'N', 'B', 'R', 'Q', 'K'],
                                               ['p', 'n', 'b', 'r', 'q', 'k']];
 
@@ -34,7 +36,8 @@ pub const MVV_LVA: [[i32; 6]; 5] = [
 ];
 
 // Piece square tables (PST) for augmenting piece values
-// based on where they reside.
+// based on where they reside.  This is from white's perspective.
+// "mg" means middle game and "eg" means end game.
 // See https://www.chessprogramming.org/PeSTO%27s_Evaluation_Function
 const fn create_pst_pawn_mg() -> [i32; 64] {
     let pst: [i32; 64] =
@@ -180,7 +183,6 @@ const fn create_pst_king_eg() -> [i32; 64] {
         -53, -34, -21, -11, -28, -14, -24, -43];
     order_pst(pst)
 }
-
 pub const PST_MIDDLE_GAME: [[i32; 64]; 6] = [
     create_pst_pawn_mg(),
     create_pst_knight_mg(),

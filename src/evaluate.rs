@@ -1,4 +1,8 @@
 //! This module contains functions related to game state evaluation.
+//! Evaluation is typically done in centipawns (1/100 of a pawn).
+//! This primary performs a static evaluation, meaning the evaluation
+//! is done based on the current state of the board without any additional
+//! searching.
 
 use crate::chess_board;
 use crate::bitboard;
@@ -62,24 +66,6 @@ pub fn is_draw_by_insufficient_material(board: &chess_board::ChessBoard) -> bool
 
 }
 
-// Returns the game phase for tapered evaluation.
-// See https://www.chessprogramming.org/Tapered_Eval
-fn get_phase(board: &chess_board::ChessBoard) -> i32 {
-    let knight_phase = 1;
-    let bishop_phase = 1;
-    let rook_phase = 2;
-    let queen_phase = 4;
-    let total_phase = 24; // 4*knight_phase + 4*bishop_phase + 4*rook_phase + 2*queen_phase
-    let mut phase: i32 = total_phase;
-    for color in 0..2 {
-        phase -= (bitboard::pop_count(board.bb_pieces[color][pieces::KNIGHT]) * knight_phase) as i32;
-        phase -= (bitboard::pop_count(board.bb_pieces[color][pieces::BISHOP]) * bishop_phase) as i32;
-        phase -= (bitboard::pop_count(board.bb_pieces[color][pieces::ROOK]) * rook_phase) as i32;
-        phase -= (bitboard::pop_count(board.bb_pieces[color][pieces::QUEEN]) * queen_phase) as i32;
-    }
-    (phase * 256 + (total_phase / 2)) / total_phase
-}
-
 // Returns the game board evaluation, specific to whether this is an end
 // game or not, from the point of view of the
 // player whose turn it is.  Returned value is in centipawns.
@@ -104,7 +90,8 @@ pub fn static_evaluation_phase(board: &chess_board::ChessBoard, is_end_game: boo
             for square in bitboard::occupied_squares(*bb) {
                 
                 // The PST's are from white's perspective, so we have to flip
-                // the look up for black
+                // the look up for black.  Performing a bitwise "xor 56" on
+                // the square will "flip" the square to the other side.
                 if is_end_game {
                     if color == pieces::COLOR_WHITE {
                         totals[color] += pieces::PIECE_VALUES_EG[piece] + pieces::PST_END_GAME[piece][square];
@@ -204,4 +191,24 @@ pub fn static_evaluation(board: &chess_board::ChessBoard) -> i32 {
     let end_game_eval = static_evaluation_phase(board, true);
     let phase = get_phase(board);
     ((middle_game_eval * (256 - phase)) + (end_game_eval * phase)) / 256
+}
+
+// Returns the game phase for tapered evaluation.  This blends the middle game
+// and end game evaluation as pieces are removed to avoid a dramatic shift
+// in evaluation between the middle and end game.
+// See https://www.chessprogramming.org/Tapered_Eval
+fn get_phase(board: &chess_board::ChessBoard) -> i32 {
+    let knight_phase = 1;
+    let bishop_phase = 1;
+    let rook_phase = 2;
+    let queen_phase = 4;
+    let total_phase = 24; // 4*knight_phase + 4*bishop_phase + 4*rook_phase + 2*queen_phase
+    let mut phase: i32 = total_phase;
+    for color in 0..2 {
+        phase -= (bitboard::pop_count(board.bb_pieces[color][pieces::KNIGHT]) * knight_phase) as i32;
+        phase -= (bitboard::pop_count(board.bb_pieces[color][pieces::BISHOP]) * bishop_phase) as i32;
+        phase -= (bitboard::pop_count(board.bb_pieces[color][pieces::ROOK]) * rook_phase) as i32;
+        phase -= (bitboard::pop_count(board.bb_pieces[color][pieces::QUEEN]) * queen_phase) as i32;
+    }
+    (phase * 256 + (total_phase / 2)) / total_phase
 }

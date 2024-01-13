@@ -15,7 +15,7 @@ The following features are implemented:
  * Iterative deepening to allow for more efficient move ordering and time management
  * Transposition tables (with Zobrist hashing) for fast lookup and enhanced move ordering
  * Move ordering based on principal variation, cut nodes, capture moves sorted via MVV-LVA (Most Valuable Victim, Least Valuable Attacker), and killer moves
- * Quiescence search with static exchange evaluation (SEE) and delta pruning to mitigate the horizon effect
+ * Quiescence search with delta pruning and static exchange evaluation (SEE) to mitigate the horizon effect
  * Tapered static evaluation based on piece values, piece-square tables (PST), and game state
 
 Topas Chess is named after "Topas", one of my children's hermit crabs.  Topas escaped in the house one day and we spent quite a few hours searching for her (successfully).  Hopefully Topas Chess will search as diligently as we did... although perhaps a bit quicker.

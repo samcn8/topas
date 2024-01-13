@@ -8,8 +8,9 @@
 //! available memory on the system.
 //! 
 //! This module uses iterative deepening to progressively search higher
-//! depths, storing the principal variable (PV) -- the best line
-//! computed so far -- as the best candidate move for the next depth.
+//! depths, storing the principal variation (PV) -- the best line
+//! computed so far -- with the first move of the PV being the best
+//! candidate move for the next depth.
 
 use std::time;
 use std::cmp;
@@ -28,7 +29,7 @@ const DRAW_VALUE: i32 = 0;
 const INF: i32 = 100000000;
 
 // When prioritizing moves, a bonus may be assigned to a move.
-// Principal variable (PV) moves are the most valuable, and are
+// Principal variation (PV) moves are the most valuable, and are
 // usually discovered on the previous iterative deepening loop.
 // Moves that lead to a beta cutoff are also very valuable as they
 // can signficantly decrease the search space.  Promotions and
@@ -75,7 +76,7 @@ struct TTEntry {
     // the "depth left to search when we first hit this node" as
     // opposed to "the ply we were at when searching this node".
     // During a search, the depth starts high (at the root node)
-    // and hits 0 at the ends of the standard search.
+    // and hits 0 at the end of the standard search.
     depth: u8,
 
     // The score at this node (caveated by the flag)
@@ -117,12 +118,11 @@ struct SEEAttacker {
 #[derive(Debug)]
 pub struct BestMoveInformation {
 
-    // The best move
-    // Represents (start square, end square)
+    // The best move represented as (start square, end square)
     pub best_move_from_last_iteration: Option<(u8, u8)>,
 
-    // The value / score from the engine's perspective assuming
-    // the best move is played
+    // The value / score from the engine's (current player's)
+    // perspective assuming the best move is played
     pub value: i32,
 
     // The max depth that ended up being searched in the iterative
@@ -150,10 +150,11 @@ pub struct SearchEngine {
     // is 24B so the total size of the TT is: 24B * num_tt_entries.
     num_tt_entries: usize,
 
-    // The transposition table.
+    // The transposition table
     transposition_table: Vec<Option<TTEntry>>,
 
-    // Killer moves, indexed by ply
+    // Killer moves, indexed by ply.  We assume that we will
+    // never reach greater than 100 ply.
     primary_killers: [Option<(u8, u8)>; 100],
     secondary_killers: [Option<(u8, u8)>; 100],
 
@@ -161,13 +162,13 @@ pub struct SearchEngine {
     max_depth_for_search: u8,
     
     // The stored best move from the last iteration
-    // Represents (start square, end square)
+    // represented by (start square, end square)
     best_move_from_last_iteration: Option<(u8, u8)>,
 
     // Total moves analyzed in current search
     moves_analyzed: i32,
 
-    // The maximum time we can spend on this move
+    // The maximum time we can spend on this move in milliseconds
     time_max_for_move: u128,
 
     // The time we started the move
@@ -253,9 +254,155 @@ impl SearchEngine {
         self.board.print_debug();
     }
 
+    // This returns the engine's top move given a maximum search depth.
+    // This uses self.board as the current state of the board to search from.
+    // This uses an iterative deepening search.  The PV move found in the
+    // previous iteration is the first searched node in the next iteration.
+    // This will print information to standard out in UCI format in compliance
+    // with the UCI protocol.
+    pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32) {
+
+        // Ensure we're either using depth or time as a limiter
+        if max_depth == 0 && time_available <= 0 {
+            println!("Search must be limited by depth or time; ignoring");
+            return;
+        }
+
+        // Sanity check on transposition tables.  Note that the user should
+        // have sent a ucinewgame command first to reset the transposition
+        // tables.  But, if they did not, we'll reset them here so we don't
+        // crash.
+        if self.transposition_table.len() == 0 {
+            self.transposition_table.clear();
+            self.transposition_table.resize_with(self.num_tt_entries, ||-> Option<TTEntry> {None});
+        }
+
+        // If depth is 0, then we're not using depth as a limiter
+        if max_depth == 0 {
+            max_depth = 99;
+        }
+
+        // If time_available is greater than 0, then we're using
+        // time as a limiter
+        let mut time_for_move = INF;
+        if time_available > 0 {
+
+            // For time management purposes, we allocate 1/25th of the
+            // remaining time available for this move, plus half of our
+            // time increment.  If we're running low on time, we try
+            // to ensure we have at least 100ms for a move.
+            time_for_move = time_available / 25 + time_inc / 2;
+            if time_for_move > time_available {
+                time_for_move = time_available - 500;
+            }
+            if time_for_move < 0 {
+                time_for_move = 100;
+            }
+        }
+
+        // Update start time and move time
+        self.move_start_time =  time::Instant::now();
+        self.time_max_for_move = time_for_move as u128;
+        self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
+
+        // Information about the last iteration
+        let mut last_iteration_info: Option<BestMoveInformation> = None;
+
+        // Start of iterative deepening loop
+        let mut value: i32;
+        for depth in 1..(max_depth+1) {
+            
+            // Don't start this iteration if we don't have sufficient time.
+            // We assume it will take at least 2x longer to search this depth
+            // compare to the previous depth.
+            if depth > 1 && self.move_start_time.elapsed().as_millis() * 2 > self.time_max_for_move {
+                break;
+            }
+
+            // Start the clock for this iteration
+            let start_time_iteration = time::Instant::now();
+
+            // Store the max depth for this search
+            self.max_depth_for_search = depth;
+
+            // Find the best move using negamax
+            value = self.negamax(depth, -INF, INF, true);
+
+            // Check if this search was halted due to time and if so
+            // then ignore the results
+            if self.halt_time_over {
+                break;
+            }
+
+            // End the clock for this iteration
+            let duration_iteration = start_time_iteration.elapsed();
+
+            // Create a record for the iteration
+            let info = BestMoveInformation {
+                best_move_from_last_iteration: self.best_move_from_last_iteration,
+                value,
+                moves_analyzed: self.moves_analyzed,
+                depth_searched: depth,
+                duration_of_search: duration_iteration.as_millis(),
+                pv_line: self.extract_pv_line(),
+            };
+
+            // Per the UCI protocol, print "info" messages to standard out
+            println!("info depth {} score cp {} nodes {} time {} pv {}",
+                info.depth_searched,
+                info.value,
+                info.moves_analyzed,
+                info.duration_of_search,
+                movegen::convert_move_list_to_lan(&info.pv_line));
+
+            // Store the record
+            last_iteration_info = Some(info);
+
+            // Reset some state for next iteration
+            self.best_move_from_last_iteration = None;
+            self.moves_analyzed = 0;
+        }
+
+        // Clear out the transposition tables and search-specific state
+        self.transposition_table.clear();
+        self.transposition_table.resize_with(self.num_tt_entries, ||-> Option<TTEntry> {None});
+        self.halt_time_over = false;
+        self.time_max_for_move = 0;
+        self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
+        self.primary_killers = [None; 100];
+        self.secondary_killers = [None; 100];
+        self.max_depth_for_search = 0;
+
+        // Get the best move
+        let mut bm = String::from("0000");
+        if let Some(info) = &last_iteration_info {
+            if let Some((move_start, move_end)) = info.best_move_from_last_iteration {
+                
+                // If pawn promotion, add the promotion piece
+                // TODO: Allow promotions to pieces other than queens.
+                let mut promotion = None;
+                if move_end >= 56 || move_end <= 7 {
+                    if let Some((_,p)) = self.board.get_color_and_piece_on_square(move_start as usize) {
+                        if p == pieces::PAWN {
+                            promotion = Some(pieces::QUEEN);
+                        }
+                    }
+                }
+            
+                let move_vec = vec!((move_start, move_end, promotion));
+                bm = movegen::convert_move_list_to_lan(&move_vec);
+
+            }
+        }
+
+        // Per the UCI protocol, print the best move to standard out
+        println!("bestmove {}", bm);
+
+    }
+
     // This returns a priority bonus for move ordering if the move is
-    // a PV move or causes a beta cutoff.  This is determined via lookup
-    // in the transposition table.
+    // a PV move or causes a beta cutoff (in other words, is a hash move).
+    // This is determined via lookup in the transposition table.
     fn get_move_priority_bonus(&self, start_square: usize, end_square: usize) -> i32 {
         let tt_key = (self.board.zobrist_hash % self.num_tt_entries as u64) as usize;
         if let Some(tt_entry) = &self.transposition_table[tt_key] {
@@ -277,7 +424,6 @@ impl SearchEngine {
     // Add any "blockers" on the specified ray, except for the target.
     // Used for SEE attacker computation.
     fn add_blocks_to_see_attacker(&self, capture_square: usize, ray: u64, blockers: &mut Vec<usize>) {
-        // Found the target!  Get the blockers.
         for s in bitboard::occupied_squares(ray & self.board.bb_occupied_squares) {
             if s != capture_square {
                 blockers.push(s);
@@ -420,7 +566,7 @@ impl SearchEngine {
                         capture_attacker_bb = bitboard::BB_KING_ATTACKS[square]
                     }
 
-                    // Determine if the piece is attacking the captured square
+                    // Determine if the piece is attacking the captured square.
                     // Note that bitbord is 0 otherwise, which will bypass
                     // this if statement.
                     if capture_attacker_bb & capture_square_bb != 0 {
@@ -449,9 +595,11 @@ impl SearchEngine {
         scores.push(score);
         let mut selected_attacker_square = Some(capture_move.start_square);
         let mut selected_attacker_value = SEE_PIECE_VALUES[capture_move.piece];
+
+        // Switch turns in the simulation
         current_turn_color = 1 - current_turn_color;
 
-        // Perform captures one be one until there are none left
+        // Simulate captures one by one until there are none left
         loop {
 
             // Remove the attacker as a blocker
@@ -495,8 +643,8 @@ impl SearchEngine {
 
         }
 
-        // Finally, evaluate the scores (taking into account the option for a
-        // player to refuse to continue the capture line) and return in
+        // Finally, evaluate the scores, taking into account the option for a
+        // player to refuse to continue the capture line, and return in
         // centipawns
         for i in (1..scores.len()).rev() {
             if scores[i-1] > -scores[i] {
@@ -547,7 +695,7 @@ impl SearchEngine {
     }
 
     // This is an implementation of the quiescence search, which allows
-    // the engine to keep searching "non-quiet" (such as capture) moves
+    // the engine to keep searching "non-quiet" (i.e, capture) moves
     // beyond the search horizon.  This is done to mitigate the horizon
     // effect, which may cause a bad decision to be made right at the edge
     // of the search horizon.
@@ -556,7 +704,7 @@ impl SearchEngine {
         
         // Before doing any searching, check to make sure we're not
         // out of time.  For performance reasons, we won't check this
-        // condition on every negamax call.
+        // condition on every quiesce call.
         if self.halt_time_over {
             return 0;
         }
@@ -584,13 +732,13 @@ impl SearchEngine {
             return alpha;
         }
 
-        // Increase alpha
+        // Increase alpha if our stand pat score is high enough
         if alpha < stand_pat {
             alpha = stand_pat;
         }
 
         // Generate all legal moves.  Note that we will only search
-        // non-quiet moves.
+        // capture moves.
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color);
         movegen::retain_only_legal_moves(&mut self.board, &mut moves);
@@ -607,7 +755,7 @@ impl SearchEngine {
             }
         }
 
-        // Recursively search the non-quiet moves
+        // Recursively search the capture moves
         for m in moves.iter() {
 
             // Filter out non-captures
@@ -700,13 +848,15 @@ impl SearchEngine {
             return self.quiesce(alpha, beta);
         }
 
-        // Compute ply
+        // Compute ply, which will be used to store killer moves
         let ply = self.max_depth_for_search - depth + 1;
 
         // Generate all legal moves to search
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color);
         movegen::retain_only_legal_moves(&mut self.board, &mut moves);
+
+        // Sort the moves
         self.sort_moves(&mut moves, Some(ply));
 
         // Check for checkmate and stalemate
@@ -750,6 +900,7 @@ impl SearchEngine {
                 // is already a killer move, shift it over so that we store
                 // at most two.  Note that we don't store capture moves as
                 // killer moves because they are sorted seperately.
+                // See https://www.chessprogramming.org/Killer_Move
                 let cur_move = Some((m.start_square as u8, m.end_square as u8));
                 if m.captured_piece.is_none() && cur_move != self.primary_killers[ply as usize] {
                     self.secondary_killers[ply as usize] = self.primary_killers[ply as usize];
@@ -818,145 +969,18 @@ impl SearchEngine {
 
     }
 
-    // This returns the engine's top move given a maximum search depth.
-    // This uses self.board as the current state of the board to search from.
-    // This uses an iterative deepening search.  The PV move found in the
-    // previous iteration is the first searched node in the next iteration.
-    pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32) {
-
-        // Ensure we're either using depth or time as a limiter
-        if max_depth == 0 && time_available <= 0 {
-            println!("Search must be limited by depth or time; ignoring");
-            return;
-        }
-
-        // Sanity check on transposition tables.  Note that the user should
-        // have sent a ucinewgame command first to reset the transposition
-        // tables.  But, if they did not, we'll reset them here so we don't
-        // crash.
-        if self.transposition_table.len() == 0 {
-            self.transposition_table.clear();
-            self.transposition_table.resize_with(self.num_tt_entries, ||-> Option<TTEntry> {None});
-        }
-
-        // If depth is 0, then we're not using depth as a limiter
-        if max_depth == 0 {
-            max_depth = 99;
-        }
-
-        // If time_available is greater than 0, then we're using
-        // time as a limiter
-        let mut time_for_move = INF;
-        if time_available > 0 {
-            time_for_move = time_available / 25 + time_inc / 2;
-            if time_for_move > time_available {
-                time_for_move = time_available - 500;
-            }
-            if time_for_move < 0 {
-                time_for_move = 100;
-            }
-        }
-
-        // Update start time and move time
-        self.move_start_time =  time::Instant::now();
-        self.time_max_for_move = time_for_move as u128;
-        self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
-
-        // Information about the last iteration
-        let mut last_iteration_info: Option<BestMoveInformation> = None;
-
-        // Start of iterative deepening loop
-        let mut value: i32;
-        for depth in 1..(max_depth+1) {
-            
-            // Don't start this iteration if we don't have sufficient time
-            if depth > 1 && self.move_start_time.elapsed().as_millis() * 2 > self.time_max_for_move {
-                break;
-            }
-
-            // Timing
-            let start_time_iteration = time::Instant::now();
-
-            // Store the max depth for this search
-            self.max_depth_for_search = depth;
-
-            // Find the best move using negamax
-            value = self.negamax(depth, -INF, INF, true);
-
-            // Check if this search was halted due to time and if so
-            // then ignore the results
-            if self.halt_time_over {
-                break;
-            }
-
-            let duration_iteration = start_time_iteration.elapsed();
-
-            // Create a record for it
-            let info = BestMoveInformation {
-                best_move_from_last_iteration: self.best_move_from_last_iteration,
-                value,
-                moves_analyzed: self.moves_analyzed,
-                depth_searched: depth,
-                duration_of_search: duration_iteration.as_millis(),
-                pv_line: self.extract_pv_line(),
-            };
-
-            // TODO - send this to caller
-            println!("info depth {} score cp {} nodes {} time {} pv {}",
-                info.depth_searched,
-                info.value,
-                info.moves_analyzed,
-                info.duration_of_search,
-                movegen::convert_move_list_to_lan(&info.pv_line));
-
-            // Store the record
-            last_iteration_info = Some(info);
-
-            // Reset some state for next iteration
-            self.best_move_from_last_iteration = None;
-            self.moves_analyzed = 0;
-        }
-
-        // Clear out the transposition tables and search-specific state
-        self.transposition_table.clear();
-        self.transposition_table.resize_with(self.num_tt_entries, ||-> Option<TTEntry> {None});
-        self.halt_time_over = false;
-        self.time_max_for_move = 0;
-        self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
-        self.primary_killers = [None; 100];
-        self.secondary_killers = [None; 100];
-        self.max_depth_for_search = 0;
-
-        // Provide the best move to the caller
-        let mut bm = String::from("0000");
-        if let Some(info) = &last_iteration_info {
-            if let Some((move_start, move_end)) = info.best_move_from_last_iteration {
-                
-                // If pawn promotion, add the promotion piece
-                // TODO: Allow promotions to pieces other than queens.
-                let mut promotion = None;
-                if move_end >= 56 || move_end <= 7 {
-                    if let Some((_,p)) = self.board.get_color_and_piece_on_square(move_start as usize) {
-                        if p == pieces::PAWN {
-                            promotion = Some(pieces::QUEEN);
-                        }
-                    }
-                }
-            
-                let move_vec = vec!((move_start, move_end, promotion));
-                bm = movegen::convert_move_list_to_lan(&move_vec);
-
-            }
-        }
-        println!("bestmove {}", bm);
-
-    }
-
     // Extract the PV line from the transposition table
     fn extract_pv_line(&mut self) -> Vec<(u8, u8, Option<usize>)> {
+
         let mut pv_line = Vec::new();
         let mut moves_made = 0;
         let mut zobrist_loop_detect = Vec::new();
+
+        // Follow the PV moves in the transposition table until there are none
+        // remaining at that depth.  Note that because the transposition table
+        // is a hash table with limited size, it is possible that PV moves
+        // were overwritten later in search.  In this case, the PV line discovered
+        // may be shorter than it should be according to the depth searched.
         loop {
             let tt_key = (self.board.zobrist_hash % self.num_tt_entries as u64) as usize;
             if let Some(tt_entry) = &self.transposition_table[tt_key] {

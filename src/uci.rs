@@ -1,4 +1,9 @@
 // This module implements the Universal Chess Interface (UCI).
+// This interface uses standard input and output to interact
+// with the chess engine.  There is a main processing loop
+// "main_loop" which will handle all input.  Output is printed
+// to standard out by the module that has relavant UCU information
+// (for instance, the search module).
 // See https://en.wikipedia.org/wiki/Universal_Chess_Interface
 
 use std::io;
@@ -15,7 +20,7 @@ pub struct UCI {
 
 impl UCI {
 
-    // Construct a new ChessBoard
+    // Construct a new engine
     pub fn new() -> UCI {
         UCI {
             engine: search::SearchEngine::new(),
@@ -27,7 +32,7 @@ impl UCI {
 
         loop {
 
-            // Get the UCI command and parse into tokens
+            // Get the UCI command and parse it into tokens
             let mut uci_command = String::new();
             io::stdin().read_line(&mut uci_command).expect("Failed to read line");
             let tokens: Vec<&str> = uci_command.split_whitespace().collect();
@@ -52,7 +57,7 @@ impl UCI {
 
     // Process the "uci" command
     fn uci_command(&self) {
-        println!("id name Topas Chess");
+        println!("id name Topas Chess 0.1.0");
         println!("id author Sam Nelson");
         println!("uciok");
     }
@@ -102,8 +107,8 @@ impl UCI {
     }
 
     // Process the "go" command
-    // This is the main request to search.  The search must run
-    // in a seperate thread in order to keep UCI responsive.
+    // This is the main request to search.
+    // TODO: Run search in seperate thread in order to keep UCI responsiveness
     fn go_command(&mut self, tokens: &Vec<&str>) {
         let my_color = self.engine.color_turn();
         let my_color_time_param = if my_color == pieces::COLOR_WHITE {"wtime"} else {"btime"};
@@ -111,6 +116,8 @@ impl UCI {
         let mut my_time = -1;
         let mut my_inc = -1;
         let mut depth = 0;
+
+        // Extract the requested depth, if provided
         if let Some(e) = tokens.iter().position(|&x| x == "depth") {
             if tokens.len() > e+1 {
                 if let Ok(d) = tokens[e+1].parse::<u8>() {
@@ -118,6 +125,8 @@ impl UCI {
                 }
             }
         }
+
+        // Extract the time remaining and increment, if provided
         if let Some(e) = tokens.iter().position(|&x| x == my_color_time_param) {
             if tokens.len() > e+1 {
                 if let Ok(d) = tokens[e+1].parse::<i32>() {
@@ -135,6 +144,7 @@ impl UCI {
 
         // Ensure we're either using depth or time as a bound, else
         // we'll never end.
+        // TODO: Support "go infinity"
         if depth > 0 || my_time > 0 {
             self.engine.find_best_move(depth, my_time, my_inc);
         } else {

@@ -28,7 +28,8 @@ pub struct ChessMove {
 
 }
 
-// Converts a list of moves to long algebraic notation
+// Converts a list of moves to long algebraic notation.  This notation is
+// used by the UCI protocol.
 pub fn convert_move_list_to_lan(moves: &Vec<(u8, u8, Option<usize>)>) -> String {
     let mut lan_str = String::new();
     for m in moves.iter() {
@@ -48,16 +49,6 @@ pub fn convert_move_list_to_lan(moves: &Vec<(u8, u8, Option<usize>)>) -> String 
     lan_str
 }
 
-// Converts a standard square position string into a square ID.
-// For instance, "a3" -> 3
-fn convert_square_str_into_id(move_str: &str) -> usize {
-    let file = if let Some(e) = move_str.chars().nth(0) {e} else {panic!("Invalid move string - file - {}", move_str)};
-    let file = if let Some(e) = "abcdefgh".find(file) {e as usize} else {panic!("Invalid move string - file - {}", move_str)};
-    let rank = if let Some(e) = move_str.chars().nth(1) {e} else {panic!("Invalid move string - rank - {}", move_str)};
-    let rank = if let Some(e) = rank.to_digit(10) {(e-1) as usize} else {panic!("Invalid move string - rank - {}", move_str)};
-    rank * 8 + file
-}
-
 // Converts a UCI-style move list (long algebraic notation without
 // piece names) into a vector of (start square, end square) tuples.
 pub fn convert_moves_str_into_list(move_str: &str) -> Vec<(usize, usize)> {
@@ -72,49 +63,8 @@ pub fn convert_moves_str_into_list(move_str: &str) -> Vec<(usize, usize)> {
     moves
 }
 
-// Get any pawn push moves for a color from a starting location.
-fn get_pawn_push_targets_bb(color: usize, empty: u64, square: usize) -> u64 {
-    let pawn_bb = bitboard::to_bb(square);
-    let single_push_bb = if color == pieces::COLOR_WHITE {bitboard::north_one(pawn_bb) & empty} else {bitboard::south_one(pawn_bb) & empty};
-    let double_push_bb = if color == pieces::COLOR_WHITE {bitboard::north_one(single_push_bb) & empty & bitboard::BB_4RANK} else {bitboard::south_one(single_push_bb) & empty & bitboard::BB_5RANK};
-    single_push_bb | double_push_bb
-}
-
-// Get any king target square related to castling
-fn get_castling_king_targets_bb(board: &chess_board::ChessBoard, color: usize, occ: u64) -> u64 {
-    let mut king_castling_bb: u64 = 0;
-    if color == pieces::COLOR_WHITE {
-        // Ensure we have appropriate castling rights and there are
-        // no pieces between the king and rook
-        if board.white_ks_castling_rights {
-            if bitboard::BB_WKS_BETWEEN & occ == 0 {
-                king_castling_bb |= bitboard::BB_WKS_KING_END;
-            }
-        }
-        if board.white_qs_castling_rights {
-            if bitboard::BB_WQS_BETWEEN & occ == 0 {
-                king_castling_bb |= bitboard::BB_WQS_KING_END;
-            }
-        }
-    } else {
-        // Ensure we have appropriate castling rights and there are
-        // no pieces between the king and rook
-        if board.black_ks_castling_rights {
-            if bitboard::BB_BKS_BETWEEN & occ == 0 {
-                king_castling_bb |= bitboard::BB_BKS_KING_END;
-            }
-        }
-        if board.black_qs_castling_rights {
-            if bitboard::BB_BQS_BETWEEN & occ == 0 {
-                king_castling_bb |= bitboard::BB_BQS_KING_END;
-            }
-        }
-    }
-    king_castling_bb
-}
-
 // Get all diagonal attacks (bottom left to top right) from a starting
-// location.
+// location.  This is used for bishop and queen movement.
 // Portion 0 is the entire ray
 // Portion 1 is the southern part of the ray (mapping west in first rank)
 // Portion 2 is the northern part of the ray (mapping east in first rank)
@@ -132,7 +82,7 @@ pub fn get_diagonal_attacks_bb(occ: u64, square: usize, portion: i32) -> u64 {
 }
 
 // Get all anti-diagonal attacks (top left to bottom right) from a starting
-// location.
+// location.  This is used for bishop and queen movement.
 // Portion 0 is the entire ray
 // Portion 1 is the northern part of the ray (mapping west in first rank)
 // Portion 2 is the southern part of the ray (mapping east in first rank)
@@ -149,7 +99,8 @@ pub fn get_antidiagonal_attacks_bb(occ: u64, square: usize, portion: i32) -> u64
     bitboard::BB_ANTIDIAGONAL_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(first_rank_bb)
 }
 
-// Get all rank attacks from a starting location
+// Get all rank attacks from a starting location.  This is used for
+// rook and queen movement.
 // Portion 0 is the entire ray
 // Portion 1 is the western part of the ray (mapping west in first rank)
 // Portion 2 is the eastern part of the ray (mapping east in first rank)
@@ -166,7 +117,8 @@ pub fn get_rank_attacks_bb(occ: u64, square: usize, portion: i32) -> u64 {
     bitboard::BB_RANK_MASK[square] & bitboard::BB_FILES[0].wrapping_mul(first_rank_bb)
 }
 
-// Get all file attacks from a starting location
+// Get all file attacks from a starting location.  This is used for rook
+// and queen movement.
 // Portion 0 is the entire ray
 // Portion 1 is the northern part of the ray (mapping west in first rank)
 // Portion 2 is the southern part of the ray (mapping east in first rank)
@@ -187,28 +139,16 @@ pub fn get_file_attacks_bb(occ: u64, square: usize, portion: i32) -> u64 {
     (bitboard::BB_FILES[7] & tmp_occ).wrapping_shr((tmp_square ^ 7) as u32)
 }
 
-// Determine the opponent's piece that is being captured
-fn get_opponents_captured_piece(opp_bbs: &Vec<u64>, capture_square: usize, is_en_passant: bool) -> usize {
-    if is_en_passant {
-        return pieces::PAWN;
-    }
-    for (opp_piece, opp_bb) in opp_bbs.iter().enumerate() {
-        if bitboard::occupied_squares(*opp_bb).contains(&capture_square) {
-            return opp_piece;
-        }
-    }
-    panic!("Invalid bitboard; cannot find opponents captured piece");
-}
-
 // Generate all psuedo-legal moves for a given color.
 // A psuedo-legal move is an otherwise legal move that has not yet been
 // checked to determine if it leaves the player's king in check.
 pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color: usize) -> Vec<ChessMove> {
     
+    // Keep track of capture moves and quiet moves seperately
     let mut capture_moves = Vec::new();
     let mut quiet_moves = Vec::new();
 
-    // Get colors
+    // Get color of opponent
     let opp_color = 1 - my_color;
 
     // Create the en passant bitboard, which will be 0 if no en passant
@@ -225,7 +165,7 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
             // Store state regarding an en passant capture
             let mut is_en_passant = false;
 
-            // Get quite (i.e., non-capture) and capture move bitboards for the piece
+            // Get quiet (i.e., non-capture) and capture move bitboards for the piece
             let quite_move_bb;
             let capture_move_bb;
             if piece == pieces::PAWN {
@@ -294,9 +234,103 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
     // This will get re-sorted anyway, but may make the re-sort faster.
     capture_moves.append(&mut quiet_moves);
     capture_moves
+
 }
 
-// Determines whether the king of a given color is in check
+// Check whether or not the king of the passed in color is in check
+pub fn is_king_in_check(board: &chess_board::ChessBoard, king_color: usize) -> bool {
+    let king_square = match bitboard::bit_scan_forward(board.bb_pieces[king_color][pieces::KING]) {
+        Some(e) => e,
+        None => panic!("Cannot find king on bitboard"),
+    };
+    is_square_attacked_by_side(&board, king_square, 1 - king_color)
+}
+
+// Modify the passed in moves vector to keep only moves that don't leave the
+// player's king in check.
+pub fn retain_only_legal_moves(board: &mut chess_board::ChessBoard, moves: &mut Vec<ChessMove>) {
+    let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
+    moves.retain(|i| {
+
+        // If this is a castling move, ensure the king is not in check
+        // and the square the king is moving through is not attacked.
+        if i.piece == pieces::KING && i.start_square.abs_diff(i.end_square) == 2 {
+            let opp_color = 1 - my_color;
+            let through_square = if i.start_square > i.end_square {i.start_square - 1} else {i.start_square + 1};
+            if is_king_in_check(board, my_color) || is_square_attacked_by_side(board, through_square, opp_color){
+                return false;
+            }
+        }
+
+        // Ensure the king is not in check after the move is made
+        board.make_move(i.start_square, i.end_square);
+        let keepit = !is_king_in_check(board, my_color);
+        board.unmake_move();
+        keepit
+
+    });
+
+}
+
+// Get any pawn push moves for a color from a starting location.
+fn get_pawn_push_targets_bb(color: usize, empty: u64, square: usize) -> u64 {
+    let pawn_bb = bitboard::to_bb(square);
+    let single_push_bb = if color == pieces::COLOR_WHITE {bitboard::north_one(pawn_bb) & empty} else {bitboard::south_one(pawn_bb) & empty};
+    let double_push_bb = if color == pieces::COLOR_WHITE {bitboard::north_one(single_push_bb) & empty & bitboard::BB_4RANK} else {bitboard::south_one(single_push_bb) & empty & bitboard::BB_5RANK};
+    single_push_bb | double_push_bb
+}
+
+// Get any king target square related to castling
+fn get_castling_king_targets_bb(board: &chess_board::ChessBoard, color: usize, occ: u64) -> u64 {
+    let mut king_castling_bb: u64 = 0;
+    if color == pieces::COLOR_WHITE {
+
+        // Ensure we have appropriate castling rights and there are
+        // no pieces between the king and rook
+        if board.white_ks_castling_rights {
+            if bitboard::BB_WKS_BETWEEN & occ == 0 {
+                king_castling_bb |= bitboard::BB_WKS_KING_END;
+            }
+        }
+        if board.white_qs_castling_rights {
+            if bitboard::BB_WQS_BETWEEN & occ == 0 {
+                king_castling_bb |= bitboard::BB_WQS_KING_END;
+            }
+        }
+
+    } else {
+
+        // Ensure we have appropriate castling rights and there are
+        // no pieces between the king and rook
+        if board.black_ks_castling_rights {
+            if bitboard::BB_BKS_BETWEEN & occ == 0 {
+                king_castling_bb |= bitboard::BB_BKS_KING_END;
+            }
+        }
+        if board.black_qs_castling_rights {
+            if bitboard::BB_BQS_BETWEEN & occ == 0 {
+                king_castling_bb |= bitboard::BB_BQS_KING_END;
+            }
+        }
+
+    }
+    king_castling_bb
+}
+
+// Determine the opponent's piece that is being captured
+fn get_opponents_captured_piece(opp_bbs: &Vec<u64>, capture_square: usize, is_en_passant: bool) -> usize {
+    if is_en_passant {
+        return pieces::PAWN;
+    }
+    for (opp_piece, opp_bb) in opp_bbs.iter().enumerate() {
+        if bitboard::occupied_squares(*opp_bb).contains(&capture_square) {
+            return opp_piece;
+        }
+    }
+    panic!("Invalid bitboard; cannot find opponents captured piece");
+}
+
+// Determine if a square is attacked by a given side
 fn is_square_attacked_by_side(board: &chess_board::ChessBoard, square: usize, by_side_color: usize) -> bool {
     let pawns = board.bb_pieces[by_side_color][pieces::PAWN];
     if bitboard::BB_PAWN_ATTACKS[1 - by_side_color][square] & pawns != 0 {
@@ -321,39 +355,14 @@ fn is_square_attacked_by_side(board: &chess_board::ChessBoard, square: usize, by
     false
 }
 
-// Check whether or not the king of the passed in color is in check
-pub fn is_king_in_check(board: &chess_board::ChessBoard, king_color: usize) -> bool {
-    let king_square = match bitboard::bit_scan_forward(board.bb_pieces[king_color][pieces::KING]) {
-        Some(e) => e,
-        None => panic!("Cannot find king on bitboard"),
-    };
-    is_square_attacked_by_side(&board, king_square, 1 - king_color)
-}
-
-// Modify the passed in moves vector to keep only moves that don't leave
-// player's king in check.
-pub fn retain_only_legal_moves(board: &mut chess_board::ChessBoard, moves: &mut Vec<ChessMove>) {
-    let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
-    moves.retain(|i| {
-
-        // If this is a castling move, ensure the king is not in check
-        // and the square the king is moving through is not attacked.
-        if i.piece == pieces::KING && i.start_square.abs_diff(i.end_square) == 2 {
-            let opp_color = 1 - my_color;
-            let through_square = if i.start_square > i.end_square {i.start_square - 1} else {i.start_square + 1};
-            if is_king_in_check(board, my_color) || is_square_attacked_by_side(board, through_square, opp_color){
-                return false;
-            }
-        }
-
-        // Ensure the king is not in check after the move is made
-        board.make_move(i.start_square, i.end_square);
-        let keepit = !is_king_in_check(board, my_color);
-        board.unmake_move();
-        keepit
-
-    });
-
+// Converts a standard square position string into a square ID.
+// For instance, "a3" -> 3
+fn convert_square_str_into_id(move_str: &str) -> usize {
+    let file = if let Some(e) = move_str.chars().nth(0) {e} else {panic!("Invalid move string - file - {}", move_str)};
+    let file = if let Some(e) = "abcdefgh".find(file) {e as usize} else {panic!("Invalid move string - file - {}", move_str)};
+    let rank = if let Some(e) = move_str.chars().nth(1) {e} else {panic!("Invalid move string - rank - {}", move_str)};
+    let rank = if let Some(e) = rank.to_digit(10) {(e-1) as usize} else {panic!("Invalid move string - rank - {}", move_str)};
+    rank * 8 + file
 }
 
 // =====================================

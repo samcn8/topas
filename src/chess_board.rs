@@ -16,7 +16,7 @@ use crate::bitboard;
 use crate::zobrist;
 use crate::pieces;
 
-// FEN for the starting position
+// FEN string for the starting position
 pub const STARTFEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 // Convert a file in 0-7 and rank in 0-7 to a square ID
@@ -92,7 +92,7 @@ pub struct ChessBoard {
     pub black_castled: bool,
 
     // If not None, this indicates the active en passant square.
-    // This is the square the opposing pawn just moved through on a two-row
+    // This is the square the opposing pawn just moved through on a two step
     // move, if the current player can capture en passant to that square.
     pub en_passant_rights: Option<usize>,
 
@@ -130,7 +130,7 @@ impl ChessBoard {
         self.new_game_from_fen(STARTFEN);
     }
 
-    // Set / reset the game state to the starting point listed in the
+    // Set / reset the game state to the point listed in the
     // FEN string (see https://en.wikipedia.org/wiki/Forsyth–Edwards_Notation)
     pub fn new_game_from_fen(&mut self, fen_str: &str) {
 
@@ -172,20 +172,6 @@ impl ChessBoard {
                 }
             }
         }
-
-        // Reset all piece bitboards to the given game state
-        /*self.bb_pieces[pieces::COLOR_WHITE][pieces::PAWN] = 0x000000000000FF00;
-        self.bb_pieces[pieces::COLOR_WHITE][pieces::KNIGHT] = 0x0000000000000042;
-        self.bb_pieces[pieces::COLOR_WHITE][pieces::BISHOP] = 0x0000000000000024;
-        self.bb_pieces[pieces::COLOR_WHITE][pieces::ROOK] = 0x0000000000000081;
-        self.bb_pieces[pieces::COLOR_WHITE][pieces::QUEEN] = 0x0000000000000008;
-        self.bb_pieces[pieces::COLOR_WHITE][pieces::KING] = 0x0000000000000010;
-        self.bb_pieces[pieces::COLOR_BLACK][pieces::PAWN] = 0x00FF000000000000;
-        self.bb_pieces[pieces::COLOR_BLACK][pieces::KNIGHT] = 0x4200000000000000;
-        self.bb_pieces[pieces::COLOR_BLACK][pieces::BISHOP] = 0x2400000000000000;
-        self.bb_pieces[pieces::COLOR_BLACK][pieces::ROOK] = 0x8100000000000000;
-        self.bb_pieces[pieces::COLOR_BLACK][pieces::QUEEN] = 0x0800000000000000;
-        self.bb_pieces[pieces::COLOR_BLACK][pieces::KING] = 0x1000000000000000;*/
 
         // Reset side and occupied bitboards
         for c in 0..2 {
@@ -321,16 +307,17 @@ impl ChessBoard {
         // Check if we have to give our opponent en passant rights
         let mut give_en_passant_rights = false;
         if piece == pieces::PAWN && (start_rank == 1 && end_rank == 3 || start_rank == 6 && end_rank == 4) {
+
             // This is a double-square pawn push
             let opponent_pawns = bitboard::occupied_squares(self.bb_pieces[opp_color][pieces::PAWN]);
             if end_file > 0 && opponent_pawns.contains(&file_rank_to_square(end_file-1, end_rank)) || 
                 end_file < 7 && opponent_pawns.contains(&file_rank_to_square(end_file+1, end_rank)) {
                 give_en_passant_rights = true;
-                // Hash - undo old en passant rights if needed
+                // Undo old en passant rights if needed
                 if let Some(e) = self.en_passant_rights {
                     self.zobrist_hash ^= self.zobrist_hasher.hash_en_passant[e % 8];
                 }
-                // Hash - update new en passant rights
+                // Update new en passant rights
                 self.zobrist_hash ^= self.zobrist_hasher.hash_en_passant[end_file];
                 if self.whites_turn {
                     self.en_passant_rights = Some(file_rank_to_square(end_file, end_rank-1));
@@ -338,9 +325,10 @@ impl ChessBoard {
                     self.en_passant_rights = Some(file_rank_to_square(end_file, end_rank+1));
                 }
             }
+
         }
         if !give_en_passant_rights {
-            // Hash - undo old en passant rights, if needed
+            // Undo old en passant rights, if needed
             if let Some(e) = self.en_passant_rights {
                 self.zobrist_hash ^= self.zobrist_hasher.hash_en_passant[e % 8];
             }
@@ -355,6 +343,7 @@ impl ChessBoard {
         // Move source to dest
         self.bb_pieces[my_color][piece] ^= from_to_bb;
         self.bb_side[my_color] ^= from_to_bb;
+        
         // Hash - place the source on dest, and revert the source square
         self.zobrist_hash ^= self.zobrist_hasher.hash_piece[end_square][my_color][piece];
         self.zobrist_hash ^= self.zobrist_hasher.hash_piece[start_square][my_color][piece];
@@ -372,7 +361,6 @@ impl ChessBoard {
                 self.bb_empty_squares ^= from_to_bb;
                 self.bb_occupied_squares ^= captured_pawn_square_bb;
                 self.bb_empty_squares ^= captured_pawn_square_bb;
-                // Hash - remove the captured pawn from its square hash
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[captured_pawn_square][opp_color][cp];
             } else {
                 // Remove captured piece from board
@@ -380,7 +368,6 @@ impl ChessBoard {
                 self.bb_side[opp_color] ^= to_bb;
                 self.bb_occupied_squares ^= from_bb;
                 self.bb_empty_squares ^= from_bb;
-                // Hash - remove the captured piece from the square hash
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[end_square][opp_color][cp];
             }
         } else {
@@ -397,7 +384,6 @@ impl ChessBoard {
         if promotion_square.is_some() {
             self.bb_pieces[my_color][pieces::PAWN] ^= to_bb;
             self.bb_pieces[my_color][pieces::QUEEN] ^= to_bb;
-            // Hash - remove the pawn from the square hash and add the queen
             self.zobrist_hash ^= self.zobrist_hasher.hash_piece[end_square][my_color][pieces::PAWN];
             self.zobrist_hash ^= self.zobrist_hasher.hash_piece[end_square][my_color][pieces::QUEEN];
         } 
@@ -488,7 +474,6 @@ impl ChessBoard {
         }
 
         // Remove castling rights
-        // Hash - also remove castling rights from Zobrist hash
         if self.white_ks_castling_rights && !wks {
             self.white_ks_castling_rights = false;
             self.zobrist_hash ^= self.zobrist_hasher.hash_white_ks_castling_rights;
@@ -508,7 +493,6 @@ impl ChessBoard {
 
         // Change side
         self.whites_turn = !self.whites_turn;
-        // Hash - change side
         self.zobrist_hash ^= self.zobrist_hasher.hash_blacks_turn;
 
         // Store Zobrist hash in history
@@ -533,9 +517,8 @@ impl ChessBoard {
             panic!("Trying to unmake move with empty move history");
         };
 
-        // Hash - change side
-        self.zobrist_hash ^= self.zobrist_hasher.hash_blacks_turn;
         // Change side
+        self.zobrist_hash ^= self.zobrist_hasher.hash_blacks_turn;
         self.whites_turn = !self.whites_turn;
 
         // Get rank (0-7) for important squares
@@ -552,11 +535,11 @@ impl ChessBoard {
 
         // Restore en passant rights if they changed
         if last_move.prior_en_passant_rights != self.en_passant_rights {
-            // Hash - undo old en passant rights, if needed
+            // Undo old en passant rights, if needed
             if let Some(e) = self.en_passant_rights {
                 self.zobrist_hash ^= self.zobrist_hasher.hash_en_passant[e % 8];
             }
-            // Hash - set en passant rights
+            // Set en passant rights
             if let Some(e) = last_move.prior_en_passant_rights {
                 self.zobrist_hash ^= self.zobrist_hasher.hash_en_passant[e % 8]
             }
@@ -570,22 +553,18 @@ impl ChessBoard {
         let bqs = last_move.prior_black_qs_castling_rights;
         if wks != self.white_ks_castling_rights {
             self.white_ks_castling_rights = wks;
-            // Hash - toggle rights
             self.zobrist_hash ^= self.zobrist_hasher.hash_white_ks_castling_rights
         }
         if wqs != self.white_qs_castling_rights {
             self.white_qs_castling_rights = wqs;
-            // Hash - toggle rights
             self.zobrist_hash ^= self.zobrist_hasher.hash_white_qs_castling_rights
         }
         if bks != self.black_ks_castling_rights {
             self.black_ks_castling_rights = bks;
-            // Hash - toggle rights
             self.zobrist_hash ^= self.zobrist_hasher.hash_black_ks_castling_rights
         }
         if bqs != self.black_qs_castling_rights {
             self.black_qs_castling_rights = bqs;
-            // Hash - toggle rights
             self.zobrist_hash ^= self.zobrist_hasher.hash_black_qs_castling_rights
         }
 
@@ -598,7 +577,6 @@ impl ChessBoard {
                 self.bb_side[my_color] ^= bitboard::BB_WKS_CASTLING_ROOKS_FROM_TO;
                 self.bb_occupied_squares ^= bitboard::BB_WKS_CASTLING_ROOKS_FROM_TO;
                 self.bb_empty_squares ^= bitboard::BB_WKS_CASTLING_ROOKS_FROM_TO;
-                // Hash - apply rook to new square and revert it from old square
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[7][my_color][pieces::ROOK];
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[5][my_color][pieces::ROOK];
             } else if last_move.start_square == 4 && last_move.end_square == 2 {
@@ -606,7 +584,6 @@ impl ChessBoard {
                 self.bb_side[my_color] ^= bitboard::BB_WQS_CASTLING_ROOKS_FROM_TO;
                 self.bb_occupied_squares ^= bitboard::BB_WQS_CASTLING_ROOKS_FROM_TO;
                 self.bb_empty_squares ^= bitboard::BB_WQS_CASTLING_ROOKS_FROM_TO;
-                // Hash - apply rook to new square and revert it from old square
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[0][my_color][pieces::ROOK];
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[3][my_color][pieces::ROOK];
             } else if last_move.start_square == 60 && last_move.end_square == 62 {
@@ -614,7 +591,6 @@ impl ChessBoard {
                 self.bb_side[my_color] ^= bitboard::BB_BKS_CASTLING_ROOKS_FROM_TO;
                 self.bb_occupied_squares ^= bitboard::BB_BKS_CASTLING_ROOKS_FROM_TO;
                 self.bb_empty_squares ^= bitboard::BB_BKS_CASTLING_ROOKS_FROM_TO;
-                // Hash - apply rook to new square and revert it from old square
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[63][my_color][pieces::ROOK];
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[61][my_color][pieces::ROOK];
             } else if last_move.start_square == 60 && last_move.end_square == 58 {
@@ -622,7 +598,6 @@ impl ChessBoard {
                 self.bb_side[my_color] ^= bitboard::BB_BQS_CASTLING_ROOKS_FROM_TO;
                 self.bb_occupied_squares ^= bitboard::BB_BQS_CASTLING_ROOKS_FROM_TO;
                 self.bb_empty_squares ^= bitboard::BB_BQS_CASTLING_ROOKS_FROM_TO;
-                // Hash - apply rook to new square and revert it from old square
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[56][my_color][pieces::ROOK];
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[59][my_color][pieces::ROOK];
             }
@@ -638,7 +613,6 @@ impl ChessBoard {
         if let Some(p) = last_move.promotion_square {
             self.bb_pieces[my_color][pieces::PAWN] ^= to_bb;
             self.bb_pieces[my_color][pieces::QUEEN] ^= to_bb;
-            // Hash - remove the queen from the square hash and add the pawn
             self.zobrist_hash ^= self.zobrist_hasher.hash_piece[p][my_color][pieces::PAWN];
             self.zobrist_hash ^= self.zobrist_hasher.hash_piece[p][my_color][pieces::QUEEN];
         }
@@ -656,7 +630,6 @@ impl ChessBoard {
                 self.bb_occupied_squares ^= from_to_bb;
                 self.bb_empty_squares ^= captured_pawn_square_bb;
                 self.bb_empty_squares ^= from_to_bb;
-                // Hash - add the captured pawn to the square hash
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[captured_pawn_square][opp_color][cp];
             } else {
                 // Add the captured piece back to the board
@@ -664,7 +637,6 @@ impl ChessBoard {
                 self.bb_side[opp_color] ^= to_bb;
                 self.bb_occupied_squares ^= from_bb;
                 self.bb_empty_squares ^= from_bb;
-                // Hash - add the captured piece to the square hash
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[last_move.end_square][opp_color][cp];
             }
         } else {
@@ -676,7 +648,6 @@ impl ChessBoard {
         // Move the source back
         self.bb_pieces[my_color][last_move.piece] ^= from_to_bb;
         self.bb_side[my_color] ^= from_to_bb;
-        // Hash - move the source back
         self.zobrist_hash ^= self.zobrist_hasher.hash_piece[last_move.end_square][my_color][last_move.piece];
         self.zobrist_hash ^= self.zobrist_hasher.hash_piece[last_move.start_square][my_color][last_move.piece];
 
@@ -685,6 +656,7 @@ impl ChessBoard {
     // Return a tuple representing the color and piece on a given square.
     // The will return None if the square is empty.
     pub fn get_color_and_piece_on_square(&self, square: usize) -> Option<(usize, usize)> {
+
         // Apply bitboards one by one to see if we get a hit
         let square_bb = bitboard::to_bb(square);
         for c in 0..2 {
@@ -695,6 +667,7 @@ impl ChessBoard {
             }
         }
         None
+        
     }
 
     // Print the board
