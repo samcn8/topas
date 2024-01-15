@@ -57,7 +57,7 @@ impl UCI {
 
     // Process the "uci" command
     fn uci_command(&self) {
-        println!("id name Topas Chess 0.1.0");
+        println!("id name Topas 0.1.0");
         println!("id author Sam Nelson");
         println!("uciok");
     }

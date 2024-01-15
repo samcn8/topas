@@ -1,14 +1,14 @@
-# Topas Chess by Sam Nelson
+# Topas by Sam Nelson
 
-Topas Chess is an open source UCI chess engine written in Rust with a focus on clean, readable code.
+Topas is an open source UCI chess engine written in Rust with a focus on clean, readable code.
 
-Benchmarking against Elo-limited games with Stockfish, Topas Chess is estimated to have an Elo between 2250 and 2300.
+Benchmarking against Elo-limited games with Stockfish, Topas is estimated to have an Elo around 2300.
 
 ## Overview
 
-Topas Chess is a "from scratch" implementation I created as a hobby project with the goal of learning more about chess algorithms and Rust programming in general.
+Topas is a "from scratch" implementation I created as a hobby project with the goal of learning more about chess algorithms and Rust programming in general.
 
-Note that Topas Chess is a command line program and does not contain a GUI; the only way to interact with it is via the Universal Chess Interface (UCI) protocol.  It is recommended that users use their favorite UCI-speaking chess GUI to play against Topas Chess.
+Note that Topas is a command line program and does not contain a GUI; the only way to interact with it is via the Universal Chess Interface (UCI) protocol.  It is recommended that users use their favorite UCI-speaking chess GUI to play against Topas.
 
 The following features are implemented:
  * Universal Chess Interface (UCI) support, described below
@@ -20,7 +20,7 @@ The following features are implemented:
  * Quiescence search with delta pruning and static exchange evaluation (SEE) to mitigate the horizon effect
  * Tapered static evaluation based on piece values, piece-square tables (PST), and game state
 
-Topas Chess is named after "Topas", one of my children's hermit crabs.  Topas escaped in the house one day and we spent quite a few hours searching for her (successfully).  Hopefully Topas Chess will search as diligently as we did... although perhaps a bit quicker.
+Topas is named after one of my children's hermit crabs.  Topas (the hermit crab) escaped in the house one day and we spent quite a few hours searching for her (successfully).  Hopefully Topas (the chess engine) will search as diligently as we did... although perhaps a bit quicker.
 
 ## UCI Support
 
@@ -35,7 +35,7 @@ The following UCI commands are supported:
 
 ## Building
 
-To build Topas Chess, you need Rust.  Instructions for installing Rust (with Cargo) are found here: https://www.rust-lang.org/learn/get-started.
+To build Topas, you need Rust.  Instructions for installing Rust (with Cargo) are found here: https://www.rust-lang.org/learn/get-started.
 
 After Rust is installed, you can build using `cargo` like this:
 

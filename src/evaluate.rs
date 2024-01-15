@@ -7,12 +7,10 @@
 use crate::chess_board;
 use crate::bitboard;
 use crate::pieces;
-use crate::movegen;
 
 // Bonuses and penalities, in centipawns, for various situations
 const TEMPO_BONUS: i32 = 28;
 const BISHOP_PAIR_BONUS: i32 = 25;
-const MOBILITY_BONUS: i32 = 5;
 const ISOLATED_PAWN_PENALTY: i32 = 50;
 const DOUBLE_PAWN_PENALTY: i32 = 50;
 const NO_CASTLING_RIGHTS_PENALTY: i32 = 50;
@@ -116,32 +114,6 @@ pub fn static_evaluation_phase(board: &chess_board::ChessBoard, is_end_game: boo
     if bitboard::pop_count(board.bb_pieces[pieces::COLOR_BLACK][pieces::BISHOP]) >= 2 {
         totals[pieces::COLOR_BLACK] += BISHOP_PAIR_BONUS;
     }
-
-    // Mobility bonus, giving a bonus for every psuedo-legal move possible.
-    // Note that we do not validate these moves in order to keep this function
-    // as fast as possible.
-    //totals[pieces::COLOR_WHITE] += MOBILITY_BONUS * movegen::generate_all_psuedo_legal_moves(board, pieces::COLOR_WHITE).len() as i32;
-    //totals[pieces::COLOR_BLACK] += MOBILITY_BONUS * movegen::generate_all_psuedo_legal_moves(board, pieces::COLOR_BLACK).len() as i32;
-    /*for color in 0..2 {
-        for (piece, bb) in board.bb_pieces[color].iter().enumerate() {
-            for square in bitboard::occupied_squares(*bb) {
-                if piece == pieces::KNIGHT {
-                    totals[color] += MOBILITY_BONUS * bitboard::pop_count(bitboard::BB_KNIGHT_ATTACKS[square] & (board.bb_empty_squares | board.bb_side[1 - color])) as i32;
-                } else if piece == pieces::BISHOP {
-                    let bishop_attacks = movegen::get_diagonal_attacks_bb(board.bb_occupied_squares, square, 0) | movegen::get_antidiagonal_attacks_bb(board.bb_occupied_squares, square, 0);
-                    totals[color] +=  MOBILITY_BONUS * bitboard::pop_count(bishop_attacks & (board.bb_empty_squares | board.bb_side[1 - color])) as i32;
-                } else if piece == pieces::ROOK {
-                    let rook_attacks = movegen::get_rank_attacks_bb(board.bb_occupied_squares, square, 0) | movegen::get_file_attacks_bb(board.bb_occupied_squares, square, 0);
-                    totals[color] +=  MOBILITY_BONUS * bitboard::pop_count(rook_attacks & (board.bb_empty_squares | board.bb_side[1 - color])) as i32;
-                } else if piece == pieces::QUEEN {
-                    let bishop_attacks = movegen::get_diagonal_attacks_bb(board.bb_occupied_squares, square, 0) | movegen::get_antidiagonal_attacks_bb(board.bb_occupied_squares, square, 0);
-                    let rook_attacks = movegen::get_rank_attacks_bb(board.bb_occupied_squares, square, 0) | movegen::get_file_attacks_bb(board.bb_occupied_squares, square, 0);
-                    let queen_attacks = bishop_attacks | rook_attacks;
-                    totals[color] +=  MOBILITY_BONUS * bitboard::pop_count(queen_attacks & (board.bb_empty_squares | board.bb_side[1 - color])) as i32;
-                }
-            }
-        }
-    }*/
 
     // Pawn structure penalties and bonuses
     for color in 0..2 {

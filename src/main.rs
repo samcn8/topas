@@ -1,6 +1,6 @@
-//! Welcome to Topas Chess by Sam Nelson!
+//! Welcome to Topas by Sam Nelson!
 //! 
-//! This is the entry point into the Topas Chess engine.  Control is
+//! This is the entry point into the Topas engine.  Control is
 //! immediately passed to the Universal Chess Interface (UCI)
 //! handling loop.
 
@@ -14,7 +14,7 @@ mod search;
 mod uci;
 
 fn main() {
-    println!("Topas Chess 0.1.0 by Sam Nelson");
+    println!("Topas 0.1.0 by Sam Nelson");
     let mut uci_main = uci::UCI::new();
     uci_main.main_loop();
 }
