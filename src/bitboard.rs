@@ -192,14 +192,55 @@ pub const BB_FIRST_RANK_WEST_ATTACKS: [[u8; 256]; 8] = compute_first_rank_attack
 pub const BB_FIRST_RANK_EAST_ATTACKS: [[u8; 256]; 8] = compute_first_rank_attacks(EAST_RAY);
 
 // Compute single step bitboard functions
-pub const fn south_one (bb: u64) -> u64 {bb.wrapping_shr(8)}
-pub const fn north_one (bb: u64) -> u64 {bb.wrapping_shl(8)}
-const fn east_one (bb: u64) -> u64 {bb.wrapping_shl(1) & BB_NOT_AFILE}
-const fn north_east_one (bb: u64) -> u64 {bb.wrapping_shl(9) & BB_NOT_AFILE}
-const fn south_east_one (bb: u64) -> u64 {bb.wrapping_shr(7) & BB_NOT_AFILE}
-const fn west_one (bb: u64) -> u64 {bb.wrapping_shr(1) & BB_NOT_HFILE}
-const fn south_west_one (bb: u64) -> u64 {bb.wrapping_shr(9) & BB_NOT_HFILE}
-const fn north_west_one (bb: u64) -> u64 {bb.wrapping_shl(7) & BB_NOT_HFILE}
+pub const fn south_one(bb: u64) -> u64 {bb.wrapping_shr(8)}
+pub const fn north_one(bb: u64) -> u64 {bb.wrapping_shl(8)}
+const fn east_one(bb: u64) -> u64 {bb.wrapping_shl(1) & BB_NOT_AFILE}
+const fn north_east_one(bb: u64) -> u64 {bb.wrapping_shl(9) & BB_NOT_AFILE}
+const fn south_east_one(bb: u64) -> u64 {bb.wrapping_shr(7) & BB_NOT_AFILE}
+const fn west_one(bb: u64) -> u64 {bb.wrapping_shr(1) & BB_NOT_HFILE}
+const fn south_west_one(bb: u64) -> u64 {bb.wrapping_shr(9) & BB_NOT_HFILE}
+const fn north_west_one(bb: u64) -> u64 {bb.wrapping_shl(7) & BB_NOT_HFILE}
+
+// Compute pawn fill bitboards
+const fn north_fill(mut bb: u64) -> u64 {
+    bb |= bb.wrapping_shl(8);
+    bb |= bb.wrapping_shl(16);
+    bb |= bb.wrapping_shl(32);
+    bb
+}
+const fn south_fill(mut bb: u64) -> u64 {
+    bb |= bb.wrapping_shr(8);
+    bb |= bb.wrapping_shr(16);
+    bb |= bb.wrapping_shr(32);
+    bb
+}
+
+// Bitboards representing pawn front spans, used for passed pawn detection
+const fn compute_pawn_front_spans_color(color: usize) -> [u64; 64] {
+    let mut pawn_front_spans: [u64; 64] = [0; 64];
+    let mut square = 0;
+    let mut bb_pawn = 1;
+    loop {
+        if color == pieces::COLOR_WHITE {
+            pawn_front_spans[square as usize] = north_one(north_fill(bb_pawn)) | north_east_one(north_fill(bb_pawn)) | north_west_one(north_fill(bb_pawn));
+        } else {
+            pawn_front_spans[square as usize] = south_one(south_fill(bb_pawn)) | south_east_one(south_fill(bb_pawn)) | south_west_one(south_fill(bb_pawn));
+        }
+        bb_pawn = bb_pawn.wrapping_shl(1);
+        square += 1;
+        if square >= 64 {
+            break;
+        }
+    }
+    pawn_front_spans
+}
+const fn compute_pawn_front_spans() -> [[u64; 64]; 2] {
+    let mut pawn_front_spans: [[u64; 64]; 2] = [[0; 64]; 2];
+    pawn_front_spans[pieces::COLOR_WHITE] = compute_pawn_front_spans_color(pieces::COLOR_WHITE);
+    pawn_front_spans[pieces::COLOR_BLACK] = compute_pawn_front_spans_color(pieces::COLOR_BLACK);
+    pawn_front_spans
+}
+pub const BB_PAWN_FRONT_SPAN: [[u64; 64]; 2] = compute_pawn_front_spans();
 
 // Bitboards representing attacks of pawns (per color), for fast lookup
 const fn compute_pawn_attacks_color(color: usize) -> [u64; 64] {
@@ -218,13 +259,13 @@ const fn compute_pawn_attacks_color(color: usize) -> [u64; 64] {
             break;
         }
     }
-    return pawn_attacks;
+    pawn_attacks
 }
 const fn compute_pawn_attacks() -> [[u64; 64]; 2] {
     let mut pawn_attacks: [[u64; 64]; 2] = [[0; 64]; 2];
     pawn_attacks[pieces::COLOR_WHITE] = compute_pawn_attacks_color(pieces::COLOR_WHITE);
     pawn_attacks[pieces::COLOR_BLACK] = compute_pawn_attacks_color(pieces::COLOR_BLACK);
-    return pawn_attacks;
+    pawn_attacks
 }
 pub const BB_PAWN_ATTACKS: [[u64; 64]; 2] = compute_pawn_attacks();
 
@@ -251,7 +292,7 @@ const fn compute_knight_attacks() -> [u64; 64] {
             break;
         }
     }
-    return knight_attacks;
+    knight_attacks
 }
 pub const BB_KNIGHT_ATTACKS: [u64; 64] = compute_knight_attacks();
 
@@ -274,7 +315,7 @@ const fn compute_king_attacks() -> [u64; 64] {
             break;
         }
     }
-    return king_attacks;
+    king_attacks
 }
 pub const BB_KING_ATTACKS: [u64; 64] = compute_king_attacks();
 

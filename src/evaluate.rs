@@ -168,6 +168,18 @@ pub fn static_evaluation_phase(board: &chess_board::ChessBoard, is_end_game: boo
         }
     }
 
+    // Passed pawn bonuses based on rank.  Bonuses are 16*row where row is 1
+    // for the starting position (regardless of color).
+    for color in 0..2 {
+        for square in bitboard::occupied_squares(board.bb_pieces[color][pieces::PAWN]) {
+            if bitboard::BB_PAWN_FRONT_SPAN[color][square] & board.bb_pieces[1-color][pieces::PAWN] == 0 {
+                // This is a passed pawn
+                let row = if color == pieces::COLOR_WHITE {square / 8} else {7 - (square / 8)};
+                totals[color] += (16 * row) as i32;
+            }
+        }
+    }
+
     // Lack of castling rights penalty
     if !board.white_castled && !board.white_ks_castling_rights && !board.white_qs_castling_rights {
         totals[pieces::COLOR_WHITE] -= NO_CASTLING_RIGHTS_PENALTY;
