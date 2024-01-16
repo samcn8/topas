@@ -839,8 +839,12 @@ impl SearchEngine {
         }
 
         // Check for draw types that don't involve move checking
-        if evaluate::is_draw_by_insufficient_material(&self.board) || evaluate::is_draw_by_threefold_repitition(&self.board) {
-            return DRAW_VALUE;
+        // Note that we don't check this at the root because we still have
+        // to get and return a valid move.
+        if !root {
+            if evaluate::is_draw_by_insufficient_material(&self.board) || evaluate::is_draw_by_threefold_repitition(&self.board) {
+                return DRAW_VALUE;
+            }
         }
 
         // Check if we're at our search horizon
