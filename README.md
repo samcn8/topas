@@ -22,9 +22,10 @@ The following features are implemented:
 
 Topas is named after one of my children's hermit crabs.  Topas (the hermit crab) escaped in the house one day and we spent quite a few hours searching for her (successfully).  Hopefully Topas (the chess engine) will search as diligently as we did... although perhaps a bit quicker.
 
-## UCI Support
+## Universal Chess Interface (UCI) Support
 
-The following UCI commands are supported:
+UCI dictates the use of standard input and standard output to communicate with the chess engine.  The following UCI commands are supported:
+
  * `uci`: Tell the engine to use UCI mode.
     * Response will provide the program name and author, and any options available.  For `topas`, this will be:
         ```
@@ -45,7 +46,7 @@ The following UCI commands are supported:
  * `position`: Set the board position.
     * Usage: `position [fen <fenstring> | startpos ]  moves <move1> .... <movei>`.  Tell the engine to set up the position described in `fenstring`, or set up the starting position if `startpos` is provided.  Then play the moves given in long algebraic notation.
     * There is no response to this command.
- * `go`: Tell the engine to start calculated on the position provided by `position`.
+ * `go`: Tell the engine to start calculating on the position provided by `position`.
     * The following are supported parameters to the `go` command:
        * `depth`: Maximum depth the engine should search
        * `wtime`: White's remaining time in milliseconds until the next time controls (or, if sudden death, for the game)
