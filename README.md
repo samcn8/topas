@@ -69,6 +69,12 @@ cargo build --release
 
 Note that it is important to build with the `--release` flag, which will signficantly improve the performance of the engine.
 
+The resulting executable can be found in:
+
+```
+target/release/
+```
+
 ## Contributing
 
 Since this is just a personal hobby project, I'm not currently accepting pull requests.  However, you are free to use the code in your own engine development in accordance with the [GNU General Public License version 3](LICENSE) (GPL v3).
