@@ -14,14 +14,15 @@
 
 use std::time;
 use std::cmp;
+use std::mem;
 use crate::evaluate;
 use crate::chess_board;
 use crate::movegen;
 use crate::pieces;
 use crate::bitboard;
 
-// Default number of TT entries
-const DEFAULT_NUM_TT_ELEMENTS: usize = 100000000;
+// Default size of transposition table in MB
+pub const DEFAULT_TT_SIZE_MB: u64 = 16;
 
 // Scores for terminal states and infinity
 const CHECKMATE_VALUE: i32 = 50000;
@@ -188,7 +189,7 @@ impl SearchEngine {
     pub fn new() -> SearchEngine {
         SearchEngine {
             board: chess_board::ChessBoard::new(),
-            num_tt_entries: DEFAULT_NUM_TT_ELEMENTS,
+            num_tt_entries: (DEFAULT_TT_SIZE_MB * 1000000 / mem::size_of::<TTEntry>() as u64) as usize,
             transposition_table: Vec::new(),
             primary_killers: [None; 100],
             secondary_killers: [None; 100],
@@ -204,7 +205,7 @@ impl SearchEngine {
 
     // Start a new game, resetting everything
     pub fn new_game(&mut self) {
-        
+
         // Reset the board
         self.board.new_game();
 
@@ -244,6 +245,12 @@ impl SearchEngine {
 
     }
 
+    // Sets the transposition table size in MB
+    pub fn set_tt_size_mb(&mut self, size_mb: u64) {
+        self.num_tt_entries = (size_mb * 1000000 / mem::size_of::<TTEntry>() as u64) as usize;
+        self.transposition_table.resize_with(self.num_tt_entries, ||-> Option<TTEntry> {None});
+    }
+
     // Returns the color of the player to move
     pub fn color_turn(&self) -> usize {
         if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK}
@@ -261,6 +268,8 @@ impl SearchEngine {
     // This will print information to standard out in UCI format in compliance
     // with the UCI protocol.
     pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32, moves_to_go: u16) {
+
+        println!("{}", self.num_tt_entries);
 
         // Ensure we're either using depth or time as a limiter
         if max_depth == 0 && time_available <= 0 {

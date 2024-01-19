@@ -41,6 +41,7 @@ impl UCI {
             if !tokens.is_empty() {
                 match tokens[0] {
                     "uci" => self.uci_command(),
+                    "setoption" => self.setoption_command(&tokens),
                     "isready" => self.isready_command(),
                     "ucinewgame" => self.ucinewgame_command(),
                     "position" => self.position_command(&tokens),
@@ -59,7 +60,25 @@ impl UCI {
     fn uci_command(&self) {
         println!("id name Topas 0.1.0");
         println!("id author Sam Nelson");
+        println!("option name Hash type spin default {} min 1 max 131072", search::DEFAULT_TT_SIZE_MB);
         println!("uciok");
+    }
+
+    // Process the "setoption" command
+    fn setoption_command(&mut self, tokens: &Vec<&str>) {
+        if tokens.len() == 5 && tokens[1] == "name" && tokens[2] == "Hash" && tokens[3] == "value" {
+            if let Ok(d) = tokens[4].parse::<u64>() {
+                if d >= 1 && d <= 131072 {
+                    self.engine.set_tt_size_mb(d);
+                } else {
+                    println!("Hash value out of range");
+                }
+            } else {
+                println!("Invalid value for Hash");
+            }
+        } else {
+            println!("Invalid option");
+        }
     }
 
     // Process the "isready" command
