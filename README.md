@@ -1,4 +1,4 @@
-# Topas by Sam Nelson
+# Topas Chess Engine by Sam Nelson
 
 Topas is an open source UCI chess engine written in Rust with a focus on clean, readable code.
 
