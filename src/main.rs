@@ -14,7 +14,7 @@ mod search;
 mod uci;
 
 fn main() {
-    println!("Topas 0.1.0 by Sam Nelson");
+    println!("Topas {} by Sam Nelson", env!("CARGO_PKG_VERSION"));
     let mut uci_main = uci::UCI::new();
     uci_main.main_loop();
 }

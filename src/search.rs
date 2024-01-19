@@ -269,8 +269,6 @@ impl SearchEngine {
     // with the UCI protocol.
     pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32, moves_to_go: u16) {
 
-        println!("{}", self.num_tt_entries);
-
         // Ensure we're either using depth or time as a limiter
         if max_depth == 0 && time_available <= 0 {
             println!("Search must be limited by depth or time; ignoring");

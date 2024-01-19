@@ -2,8 +2,6 @@
 
 Topas is an open source UCI chess engine written in Rust with a focus on clean, readable code.
 
-Benchmarking against Elo-limited games with Stockfish, Topas is estimated to have an Elo around 2300.
-
 ## Overview
 
 Topas is a "from scratch" implementation I created as a hobby project with the goal of learning more about chess algorithms and Rust programming in general.
@@ -20,7 +18,7 @@ The following features are implemented:
  * Quiescence search with delta pruning and static exchange evaluation (SEE) to mitigate the horizon effect
  * Tapered static evaluation based on piece values, piece-square tables (PST), and game state
 
-Topas is named after one of my children's hermit crabs.  Topas (the hermit crab) escaped in the house one day and we spent quite a few hours searching for her (successfully).  Hopefully Topas (the chess engine) will search as diligently as we did... although perhaps a bit quicker.
+Topas is named after one of my children's hermit crabs.  Topas (the hermit crab) escaped in the house one day and we spent quite a few hours searching for her (successfully).  Hopefully Topas (the chess engine) will search as diligently as we did, although perhaps a bit quicker.
 
 ## Universal Chess Interface (UCI) Support
 

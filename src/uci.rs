@@ -29,7 +29,7 @@ impl UCI {
 
     // The main UCI processing loop
     pub fn main_loop(&mut self) {
-
+        self.engine.new_game();
         loop {
 
             // Get the UCI command and parse it into tokens
@@ -53,7 +53,6 @@ impl UCI {
             }
 
         }
-
     }
 
     // Process the "uci" command
