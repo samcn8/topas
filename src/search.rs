@@ -260,7 +260,7 @@ impl SearchEngine {
     // previous iteration is the first searched node in the next iteration.
     // This will print information to standard out in UCI format in compliance
     // with the UCI protocol.
-    pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32) {
+    pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32, moves_to_go: u16) {
 
         // Ensure we're either using depth or time as a limiter
         if max_depth == 0 && time_available <= 0 {
@@ -287,11 +287,12 @@ impl SearchEngine {
         let mut time_for_move = INF;
         if time_available > 0 {
 
-            // For time management purposes, we allocate 1/25th of the
-            // remaining time available for this move, plus half of our
-            // time increment.  If we're running low on time, we try
-            // to ensure we have at least 100ms for a move.
-            time_for_move = time_available / 25 + time_inc / 2;
+            // For time management purposes, we allocate time into
+            // equal chunks based on the number of moves to go, and
+            // add this chunk to half of our time increment.  If we're
+            // running low on time, we try to ensure we have at least
+            // 100ms for a move.
+            time_for_move = time_available / (moves_to_go as i32) + time_inc / 2;
             if time_for_move > time_available {
                 time_for_move = time_available - 500;
             }

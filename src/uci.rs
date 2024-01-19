@@ -117,6 +117,11 @@ impl UCI {
         let mut my_inc = -1;
         let mut depth = 0;
 
+        // If we don't get a "movestogo" parameter, we assume it is sudden
+        // death time controls.  In this case, always assume we have 25 moves
+        // left in the game.
+        let mut movestogo = 25;
+
         // Extract the requested depth, if provided
         if let Some(e) = tokens.iter().position(|&x| x == "depth") {
             if tokens.len() > e+1 {
@@ -142,11 +147,23 @@ impl UCI {
             }
         }
 
+        // Extract the moves to go until the next time control
+        if let Some(e) = tokens.iter().position(|&x| x == "movestogo") {
+            if tokens.len() > e+1 {
+                if let Ok(d) = tokens[e+1].parse::<u16>() {
+                    // Note that this should not be sent with 0, but be safe
+                    if d != 0 {
+                        movestogo = d;
+                    }
+                }
+            }
+        }
+
         // Ensure we're either using depth or time as a bound, else
         // we'll never end.
         // TODO: Support "go infinity"
         if depth > 0 || my_time > 0 {
-            self.engine.find_best_move(depth, my_time, my_inc);
+            self.engine.find_best_move(depth, my_time, my_inc, movestogo);
         } else {
             println!("Invalid go parameters; ignoring");
         }
