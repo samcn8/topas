@@ -909,13 +909,32 @@ impl SearchEngine {
         // Recursively search the moves
         let mut best_move = None;
         let mut value = -INF;
-        for m in moves.iter() {
+        for (idx, m) in moves.iter().enumerate() {
 
             // Make the move
             self.board.make_move(m.start_square, m.end_square, None);
 
-            // Recursively search on the new board state
-            let score_for_move = -self.negamax(depth - 1, -beta, -alpha, false);
+            // Recursively search on the new board state.
+            // Note that we're going to perform a Principal Variation Search,
+            // we were only fully search the first move with the hope that
+            // that was the best move (which is reasonable in an iterative
+            // deepening framework).  Other moves we search with a null window
+            // to test whether they raise alpha (likely not).  However, if
+            // they do then that means we've found a better move that the
+            // previously guess PV mode, and hence have to research with the
+            // full window.
+            let mut score_for_move;
+            if idx == 0 {
+                // Search the first (and likely best) with the full window
+                score_for_move = -self.negamax(depth - 1, -beta, -alpha, false);
+            } else {
+                // Search likely worse moves with a null window
+                score_for_move = -self.negamax(depth - 1, -alpha - 1, -alpha, false);
+                if alpha < score_for_move && score_for_move < beta {
+                    // A better move was found; re-search with full window
+                    score_for_move = -self.negamax(depth - 1, -beta, -alpha, false);
+                }
+            }
 
             // Update best move
             if score_for_move > value {
