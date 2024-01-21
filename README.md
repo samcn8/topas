@@ -52,12 +52,40 @@ UCI dictates the use of standard input and standard output to communicate with t
        * `winc`: White's increment per the time controls of the game
        * `binc`: Black's increment per the time controls of the game
        * `movestogo`: Number of moves remaining until the next time control.  Note that if this parameter is set, it must be greater than 0.  If the parameter is not set, it is assumed to be sudden death (meaning the remaining time is for the entire game).
+       * `movetime`: Search for exactly the specified number of milliseconds.
        * `infinite`: Search until the `stop` command is received
     * Response will be `bestmove <move>` when the search is over.  For example, `bestmove g5h4` indicates that the engine believes g5h4 is the best move.
-    * While the engine is searching, it may send `info` messages.  For example, `info depth 3 score cp 104 nodes 2187 time 12 pv d1e1 a8d8 b1c3` is a status message indicating that the engine has just seached to depth 3, searching 2187 positions in 12 milliseconds, believes that the current player is winning by 104 centipawns, and believes the principal variation (best continuation) is d1e1 a8d8 b1c3.  Status messages do not indicate that the engine is done searching, only that it has a status update to send.
+    * While the engine is searching, it may send `info` messages.  For example, `info depth 3 score cp 104 nodes 2187 time 12 pv d1e1 a8d8 b1c3` is a status message indicating that the engine has just searched to depth 3, searching 2187 positions in 12 milliseconds, believes that the current player is winning by 104 centipawns, and believes the principal variation (best continuation) is d1e1 a8d8 b1c3.  Status messages do not indicate that the engine is done searching, only that it has a status update to send.
  * `stop`: If actively searching, stop searching as soon as possible and return the best move.
  * `quit`: Quits the program as soon as possible.
  * `print` (custom, non-UCI message): Tells the engine to print the state of the board to the screen.
+
+Here is an example of Topas searching, at depth 8, for the best move from the starting position (added `>` characters to indicate user input for clarity):
+
+```
+$ ./topas
+Topas 1.2.0 by Sam Nelson
+> uci
+id name Topas 1.2.0
+id author Sam Nelson
+option name Hash type spin default 16 min 1 max 131072
+uciok
+> setoption name Hash value 1000
+> ucinewgame
+> isready
+readyok
+> position startpos
+> go depth 8
+info depth 1 score cp 8 nodes 21 time 0 pv g1f3 
+info depth 2 score cp 28 nodes 79 time 0 pv g1f3 g8f6 
+info depth 3 score cp 7 nodes 708 time 2 pv g1f3 g8f6 d2d4 
+info depth 4 score cp 28 nodes 1697 time 8 pv g1f3 g8f6 d2d4 d7d5 
+info depth 5 score cp 5 nodes 14934 time 48 pv g1f3 g8f6 d2d4 d7d5 b1c3 
+info depth 6 score cp 28 nodes 54147 time 219 pv g1f3 g8f6 d2d4 d7d5 b1c3 b8c6 
+info depth 7 score cp 3 nodes 353349 time 1209 pv g1f3 g8f6 e2e3 d7d5 c2c4 c8e6 c4d5 
+info depth 8 score cp 34 nodes 1534560 time 6191 pv e2e4 d7d5 e4d5 g8f6 d2d4 f6d5 c2c4 d5b4 
+bestmove e2e4 
+```
 
 ## Building
 
@@ -69,7 +97,7 @@ After Rust is installed, you can build using `cargo` like this:
 cargo build --release
 ```
 
-Note that it is important to build with the `--release` flag, which will signficantly improve the performance of the engine.
+Note that it is important to build with the `--release` flag, which will significantly improve the performance of the engine.
 
 The resulting executable can be found in:
 
@@ -81,13 +109,13 @@ target/release/
 
 Since this is just a personal hobby project, I'm not currently accepting pull requests.  However, you are free to use the code in your own engine development in accordance with the [GNU General Public License version 3](LICENSE) (GPL v3).
 
-## Acknowledgements
+## Acknowledgments
 
 Throughout the course of this project, I read a lot of information related to searching, evaluation, and other chess-related algorithms.  A few of the key resources that helped me understand core concepts the most were:
  * The Chess Programming Wiki: https://www.chessprogramming.org/Main_Page
  * Wikipedia (which has great pseudo-code examples): https://www.wikipedia.org
  * The Mediocre Chess blog: http://mediocrechess.blogspot.com
  * Stockfish: https://github.com/official-stockfish/Stockfish
- * Snakefish (particularly the excellent explaination of Kindergarten bitboards): https://github.com/cglouch/snakefish
+ * Snakefish (particularly the excellent explanation of Kindergarten bitboards): https://github.com/cglouch/snakefish
  * Piece square tables and piece values are from https://www.chessprogramming.org/PeSTO%27s_Evaluation_Function, which credits Ronald Friedrich's RofChade engine and specifically this forum thread: http://www.talkchess.com/forum3/viewtopic.php?f=2&t=68311&start=19.
 
