@@ -15,6 +15,7 @@
 use std::time;
 use std::cmp;
 use std::mem;
+use std::sync::mpsc::Receiver;
 use crate::evaluate;
 use crate::chess_board;
 use crate::movegen;
@@ -46,8 +47,9 @@ const KILLER_MOVE_BONUS: i32 = 100;
 const SEE_PIECE_VALUES: [i32; 6] = [100, 300, 300, 500, 900, 20000];
 
 // How frequently (in number of function calls of negamax) to check for
-// a "did I run out of time" condition
-const CHECK_TIME_CONDITION_INTERVAL: u64 = 5000;
+// a halt condition.  A halt can happen if we run out of time or a
+// stop command was issued.
+const CHECK_HALT_CONDITION_INTERVAL: u64 = 5000;
 
 // TT Flag corresponding to a value
 enum TTFlag {
@@ -144,6 +146,10 @@ pub struct BestMoveInformation {
 // The main engine
 pub struct SearchEngine {
 
+    // The receiving channel used to communicate UCI commands
+    // to the engine thread.
+    pub rx_channel: Receiver<String>,
+
     // The game board
     board: chess_board::ChessBoard,
 
@@ -176,18 +182,20 @@ pub struct SearchEngine {
     move_start_time: time::Instant,
 
     // Whether the current iteration was halted due to running out of time
-    halt_time_over: bool,
+    // or receiving a stop command
+    halt_search: bool,
 
-    // Count down until checking if we're out of time
-    time_check_countdown: u64,
+    // Count down until checking for a halt condition
+    halt_check_countdown: u64,
 
 }
 
 impl SearchEngine {
 
     // Construct a new SearchEngine
-    pub fn new() -> SearchEngine {
+    pub fn new(rx: Receiver<String>) -> SearchEngine {
         SearchEngine {
+            rx_channel: rx,
             board: chess_board::ChessBoard::new(),
             num_tt_entries: (DEFAULT_TT_SIZE_MB * 1000000 / mem::size_of::<TTEntry>() as u64) as usize,
             transposition_table: Vec::new(),
@@ -198,8 +206,8 @@ impl SearchEngine {
             moves_analyzed: 0,
             time_max_for_move: 0,
             move_start_time: time::Instant::now(),
-            halt_time_over: false,
-            time_check_countdown: CHECK_TIME_CONDITION_INTERVAL,
+            halt_search: false,
+            halt_check_countdown: CHECK_HALT_CONDITION_INTERVAL,
         }
     }
 
@@ -269,12 +277,6 @@ impl SearchEngine {
     // with the UCI protocol.
     pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32, moves_to_go: u16) {
 
-        // Ensure we're either using depth or time as a limiter
-        if max_depth == 0 && time_available <= 0 {
-            println!("Search must be limited by depth or time; ignoring");
-            return;
-        }
-
         // Sanity check on transposition tables.  Note that the user should
         // have sent a ucinewgame command first to reset the transposition
         // tables.  But, if they did not, we'll reset them here so we don't
@@ -311,7 +313,7 @@ impl SearchEngine {
         // Update start time and move time
         self.move_start_time =  time::Instant::now();
         self.time_max_for_move = time_for_move as u128;
-        self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
+        self.halt_check_countdown = CHECK_HALT_CONDITION_INTERVAL;
 
         // Information about the last iteration
         let mut last_iteration_info: Option<BestMoveInformation> = None;
@@ -336,9 +338,9 @@ impl SearchEngine {
             // Find the best move using negamax
             value = self.negamax(depth, -INF, INF, true);
 
-            // Check if this search was halted due to time and if so
-            // then ignore the results
-            if self.halt_time_over {
+            // Check if this search was halted due to time or a stop command
+            // and if so then ignore the results
+            if self.halt_search {
                 break;
             }
 
@@ -374,9 +376,9 @@ impl SearchEngine {
         // Clear out the transposition tables and search-specific state
         self.transposition_table.clear();
         self.transposition_table.resize_with(self.num_tt_entries, ||-> Option<TTEntry> {None});
-        self.halt_time_over = false;
+        self.halt_search = false;
         self.time_max_for_move = 0;
-        self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
+        self.halt_check_countdown = CHECK_HALT_CONDITION_INTERVAL;
         self.primary_killers = [None; 100];
         self.secondary_killers = [None; 100];
         self.max_depth_for_search = 0;
@@ -711,18 +713,29 @@ impl SearchEngine {
     fn quiesce(&mut self, mut alpha: i32, beta: i32) -> i32 {
         
         // Before doing any searching, check to make sure we're not
-        // out of time.  For performance reasons, we won't check this
+        // halting.  For performance reasons, we won't check this
         // condition on every quiesce call.
-        if self.halt_time_over {
+        if self.halt_search {
             return 0;
         }
-        self.time_check_countdown -= 1;
-        if self.time_check_countdown <= 0 {
-            self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
+        self.halt_check_countdown -= 1;
+        if self.halt_check_countdown <= 0 {
+            self.halt_check_countdown = CHECK_HALT_CONDITION_INTERVAL;
+
+            // Check if we should halt due to time
             if self.move_start_time.elapsed().as_millis() > self.time_max_for_move {
-                self.halt_time_over = true;
+                self.halt_search = true;
                 return 0;
             }
+
+            // Check if we should halt due to a stop command
+            for cmd in self.rx_channel.try_iter() {
+                if cmd.trim() == "stop" {
+                    self.halt_search = true;
+                    return 0;
+                }
+            }
+
         }
 
         // This is our stand pat score, which is the current score
@@ -813,18 +826,29 @@ impl SearchEngine {
     fn negamax(&mut self, depth: u8, mut alpha: i32, mut beta: i32, root: bool) -> i32 {
         
         // Before doing any searching, check to make sure we're not
-        // out of time.  For performance reasons, we won't check this
+        // halting.  For performance reasons, we won't check this
         // condition on every negamax call.
-        if self.halt_time_over {
+        if self.halt_search {
             return 0;
         }
-        self.time_check_countdown -= 1;
-        if self.time_check_countdown <= 0 {
-            self.time_check_countdown = CHECK_TIME_CONDITION_INTERVAL;
+        self.halt_check_countdown -= 1;
+        if self.halt_check_countdown <= 0 {
+            self.halt_check_countdown = CHECK_HALT_CONDITION_INTERVAL;
+
+            // Check if we should halt due to time
             if self.move_start_time.elapsed().as_millis() > self.time_max_for_move {
-                self.halt_time_over = true;
+                self.halt_search = true;
                 return 0;
             }
+
+            // Check if we should halt due to a stop command
+            for cmd in self.rx_channel.try_iter() {
+                if cmd.trim() == "stop" {
+                    self.halt_search = true;
+                    return 0;
+                }
+            }
+
         }
 
         // Update moves analyzed count
@@ -1042,6 +1066,8 @@ impl SearchEngine {
 #[cfg(test)]
 mod tests {
     
+    use std::sync::mpsc::{Sender, Receiver};
+    use std::sync::mpsc;
     use crate::chess_board::ChessBoard;
     use super::*;
 
@@ -1057,6 +1083,7 @@ mod tests {
         // .Q......
         // B.......
         // ........
+        let (_, rx): (Sender<String>, Receiver<String>) = mpsc::channel();
         let mut board = ChessBoard::new();
         board.bb_pieces[pieces::COLOR_WHITE][pieces::QUEEN] = bitboard::to_bb(17);
         board.bb_pieces[pieces::COLOR_WHITE][pieces::BISHOP] = bitboard::to_bb(8);
@@ -1078,6 +1105,7 @@ mod tests {
             is_en_passant: false,
         };
         let searcher = SearchEngine {
+            rx_channel: rx,
             board,
             num_tt_entries: 0,
             transposition_table: Vec::new(),
@@ -1088,8 +1116,8 @@ mod tests {
             moves_analyzed: 0,
             time_max_for_move: 0,
             move_start_time: time::Instant::now(),
-            halt_time_over: false,
-            time_check_countdown: CHECK_TIME_CONDITION_INTERVAL,
+            halt_search: false,
+            halt_check_countdown: CHECK_HALT_CONDITION_INTERVAL,
         };
         let see_value = searcher.see_capture_eval(&m);
         assert_eq!(see_value, -600);
@@ -1103,6 +1131,7 @@ mod tests {
         // .B......
         // Q.......
         // ........
+        let (_, rx): (Sender<String>, Receiver<String>) = mpsc::channel();
         let mut board = ChessBoard::new();
         board.bb_pieces[pieces::COLOR_WHITE][pieces::QUEEN] = bitboard::to_bb(8) | bitboard::to_bb(59);
         board.bb_pieces[pieces::COLOR_WHITE][pieces::BISHOP] = bitboard::to_bb(17);
@@ -1124,6 +1153,7 @@ mod tests {
             is_en_passant: false,
         };
         let searcher = SearchEngine {
+            rx_channel: rx,
             board,
             num_tt_entries: 0,
             transposition_table: Vec::new(),
@@ -1134,8 +1164,8 @@ mod tests {
             moves_analyzed: 0,
             time_max_for_move: 0,
             move_start_time: time::Instant::now(),
-            halt_time_over: false,
-            time_check_countdown: CHECK_TIME_CONDITION_INTERVAL,
+            halt_search: false,
+            halt_check_countdown: CHECK_HALT_CONDITION_INTERVAL,
         };
         let see_value = searcher.see_capture_eval(&m);
         assert_eq!(see_value, 100);

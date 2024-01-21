@@ -52,8 +52,10 @@ UCI dictates the use of standard input and standard output to communicate with t
        * `winc`: White's increment per the time controls of the game
        * `binc`: Black's increment per the time controls of the game
        * `movestogo`: Number of moves remaining until the next time control.  Note that if this parameter is set, it must be greater than 0.  If the parameter is not set, it is assumed to be sudden death (meaning the remaining time is for the entire game).
+       * `infinite`: Search until the `stop` command is received
     * Response will be `bestmove <move>` when the search is over.  For example, `bestmove g5h4` indicates that the engine believes g5h4 is the best move.
     * While the engine is searching, it may send `info` messages.  For example, `info depth 3 score cp 104 nodes 2187 time 12 pv d1e1 a8d8 b1c3` is a status message indicating that the engine has just seached to depth 3, searching 2187 positions in 12 milliseconds, believes that the current player is winning by 104 centipawns, and believes the principal variation (best continuation) is d1e1 a8d8 b1c3.  Status messages do not indicate that the engine is done searching, only that it has a status update to send.
+ * `stop`: If actively searching, stop searching as soon as possible and return the best move.
  * `quit`: Quits the program as soon as possible.
  * `print` (custom, non-UCI message): Tells the engine to print the state of the board to the screen.
 
