@@ -36,11 +36,12 @@ const INF: i32 = 100000000;
 // Moves that lead to a beta cutoff are also very valuable as they
 // can signficantly decrease the search space.  Promotions and
 // captures are valuable, followed by killer moves.
-const PV_MOVE_PRIORITY_BONUS: i32 = 500;
-const CUTOFF_PRIORITY_BONUS: i32 = 400;
-const PROMOTION_PRIORITY_BONUS: i32 = 300;
-const CAPTURE_PRIORITY_BONUS: i32 = 200;
-const KILLER_MOVE_BONUS: i32 = 100;
+const PV_MOVE_PRIORITY_BONUS: i32 = 600;
+const CUTOFF_PRIORITY_BONUS: i32 = 500;
+const PROMOTION_PRIORITY_BONUS: i32 = 400;
+const CAPTURE_PRIORITY_BONUS: i32 = 300;
+const KILLER_MOVE_BONUS: i32 = 200;
+const PAWN_PUSH_BONUS: i32 = 100;
 
 // Piece values in centipawns used in static exchange evaluation (SEE)
 // Indexed by PNBRQK position.
@@ -320,14 +321,8 @@ impl SearchEngine {
 
         // Start of iterative deepening loop
         let mut value: i32;
-        for depth in 1..(max_depth+1) {
-            
-            // Don't start this iteration if we don't have sufficient time.
-            // We assume it will take at least 2x longer to search this depth
-            // compare to the previous depth.
-            if depth > 1 && self.move_start_time.elapsed().as_millis() * 2 > self.time_max_for_move {
-                break;
-            }
+        let mut depth = 1;
+        while depth <= max_depth {
 
             // Start the clock for this iteration
             let start_time_iteration = time::Instant::now();
@@ -371,6 +366,17 @@ impl SearchEngine {
             // Reset some state for next iteration
             self.best_move_from_last_iteration = None;
             self.moves_analyzed = 0;
+
+            // Don't start the next iteration if we don't have sufficient time.
+            // We assume it will take at least 2x longer to search the next depth
+            // compare to the depth just searched.
+            if self.move_start_time.elapsed().as_millis() + 2 * duration_iteration.as_millis() > self.time_max_for_move {
+                break;
+            }
+
+            // Increase depth
+            depth += 1;
+
         }
 
         // Clear out the transposition tables and search-specific state
@@ -679,20 +685,23 @@ impl SearchEngine {
             // Check the transposition table for PV and cut-off moves
             let mut priority = self.get_move_priority_bonus(m.start_square, m.end_square);
 
+            // Check for promotions, captures, and killer moves
             if priority == 0 {
-
-                // Check for promotions, captures, and killer moves
                 if m.piece == pieces::PAWN && (m.end_square / 8 == 0 || m.end_square / 8 == 7) {
-                    priority += PROMOTION_PRIORITY_BONUS;
+                    priority = PROMOTION_PRIORITY_BONUS;
                 } else if let Some(cap) = m.captured_piece {
-                    priority += CAPTURE_PRIORITY_BONUS + pieces::MVV_LVA[cap][m.piece];
+                    priority = CAPTURE_PRIORITY_BONUS + pieces::MVV_LVA[cap][m.piece];
                 } else if let Some(ply_val) = ply {
                     let cur_move = Some((m.start_square as u8, m.end_square as u8));
                     if cur_move == self.primary_killers[ply_val as usize] || cur_move == self.secondary_killers[ply_val as usize] {
                         priority = KILLER_MOVE_BONUS;
                     }
                 }
+            }
 
+            // Give a slight edge to pawn pushes
+            if priority == 0 && m.piece == pieces::PAWN {
+                priority = PAWN_PUSH_BONUS;
             }
 
             // Set priority
