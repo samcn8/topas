@@ -11,8 +11,8 @@ Note that Topas is a command line program and does not contain a GUI; the only w
 The following features are implemented:
  * Universal Chess Interface (UCI) support, described below
  * Chess board representation and fast attack/movement patterns using bitboards
- * Negamax with alpha-beta pruning to efficiently search to a configurable depth
- * Iterative deepening to allow for more efficient move ordering and time management
+ * Negamax with alpha-beta pruning, using a principal variation search, to efficiently search to a configurable depth
+ * Iterative deepening with aspiration windows to allow for more efficient move ordering and time management
  * Transposition tables (with Zobrist hashing) for fast lookup and enhanced move ordering
  * Move ordering based on principal variation, cut nodes, capture moves sorted via MVV-LVA (Most Valuable Victim, Least Valuable Attacker), and killer moves
  * Quiescence search with delta pruning and static exchange evaluation (SEE) to mitigate the horizon effect

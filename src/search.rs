@@ -30,6 +30,9 @@ const CHECKMATE_VALUE: i32 = 50000;
 const DRAW_VALUE: i32 = 0;
 const INF: i32 = 100000000;
 
+// Initial aspiration window size (half)
+const ASPIRATION_WINDOW_HALF_SIZE: i32 = 30;
+
 // When prioritizing moves, a bonus may be assigned to a move.
 // Principal variation (PV) moves are the most valuable, and are
 // usually discovered on the previous iterative deepening loop.
@@ -319,24 +322,42 @@ impl SearchEngine {
         // Information about the last iteration
         let mut last_iteration_info: Option<BestMoveInformation> = None;
 
+        // Start the clock for the first iteration
+        let mut start_time_iteration = time::Instant::now();
+        
         // Start of iterative deepening loop
         let mut value: i32;
         let mut depth = 1;
+        let mut alpha = -INF;
+        let mut beta = INF;
+        let mut left_aspiration_window = ASPIRATION_WINDOW_HALF_SIZE;
+        let mut right_aspiration_window = ASPIRATION_WINDOW_HALF_SIZE;
         while depth <= max_depth {
-
-            // Start the clock for this iteration
-            let start_time_iteration = time::Instant::now();
 
             // Store the max depth for this search
             self.max_depth_for_search = depth;
 
             // Find the best move using negamax
-            value = self.negamax(depth, -INF, INF, true);
+            value = self.negamax(depth, alpha, beta, true);
 
             // Check if this search was halted due to time or a stop command
             // and if so then ignore the results
             if self.halt_search {
                 break;
+            }
+
+            // If our evaluation fell outside of the window, we have
+            // to redo the search at the same depth with a wider window
+            if value <= alpha {
+                alpha -= left_aspiration_window;
+                left_aspiration_window *= 2;
+                self.best_move_from_last_iteration = None;
+                continue;
+            } else if value >= beta {
+                beta += right_aspiration_window;
+                right_aspiration_window *= 2;
+                self.best_move_from_last_iteration = None;
+                continue;
             }
 
             // End the clock for this iteration
@@ -363,6 +384,12 @@ impl SearchEngine {
             // Store the record
             last_iteration_info = Some(info);
 
+            // Reset the aspiration window for the next depth
+            left_aspiration_window = ASPIRATION_WINDOW_HALF_SIZE;
+            right_aspiration_window = ASPIRATION_WINDOW_HALF_SIZE;
+            alpha = value - left_aspiration_window;
+            beta = value + right_aspiration_window;
+
             // Reset some state for next iteration
             self.best_move_from_last_iteration = None;
             self.moves_analyzed = 0;
@@ -376,6 +403,9 @@ impl SearchEngine {
 
             // Increase depth
             depth += 1;
+
+            // Start the clock for the next iteration
+            start_time_iteration = time::Instant::now();
 
         }
 
