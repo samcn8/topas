@@ -64,9 +64,9 @@ Here is an example of Topas searching, at depth 8, for the best move from the st
 
 ```
 $ ./topas
-Topas 1.2.0 by Sam Nelson
+Topas 1.3.0 by Sam Nelson
 > uci
-id name Topas 1.2.0
+id name Topas 1.3.0
 id author Sam Nelson
 option name Hash type spin default 16 min 1 max 131072
 uciok
