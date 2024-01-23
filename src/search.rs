@@ -999,6 +999,11 @@ impl SearchEngine {
             // Unmake the move
             self.board.unmake_move();
 
+            // Check to see if we've raised alpha, and if so we can start PVS
+            if score_for_move > alpha {
+                pvs_active = true;
+            }
+
             // Check for a beta cut-off
             alpha = cmp::max(alpha, value);
             if alpha >= beta {
@@ -1019,11 +1024,6 @@ impl SearchEngine {
                 break;
             }
 
-            // Check to see if we've raised alpha, and if so we can start PVS
-            if score_for_move > alpha {
-                pvs_active = true;
-            }
-
         }
 
         // Sanity check
@@ -1031,45 +1031,61 @@ impl SearchEngine {
             panic!("No best move found");
         }
 
+        // Information about what already exists in the TT entry
+        let mut existing_tt_entry_flag = &TTFlag::Upperbound;
+        let mut existing_tt_entry_depth = 0;
+        if let Some(tt_entry) = &self.transposition_table[tt_key] {
+            if tt_entry.valid {
+                existing_tt_entry_depth = tt_entry.depth;
+                existing_tt_entry_flag = &tt_entry.flag;
+            }
+        }
+
         // Store the best move in the transposition table
         if value <= alpha_orig {
 
             // The best move in this subtree failed low, meaning that
             // it was not as good as an existing acceptable move.
-            self.transposition_table[tt_key] = Some(TTEntry {
-                zobrist_hash: self.board.zobrist_hash,
-                depth,
-                value,
-                flag: TTFlag::Upperbound,
-                best_move: None,
-                valid: true,
-            });
+            if matches!(existing_tt_entry_flag, TTFlag::Upperbound) && depth >= existing_tt_entry_depth {
+                self.transposition_table[tt_key] = Some(TTEntry {
+                    zobrist_hash: self.board.zobrist_hash,
+                    depth,
+                    value,
+                    flag: TTFlag::Upperbound,
+                    best_move: None,
+                    valid: true,
+                });
+            }
 
         } else if value >= beta {
 
             // The best move in this subtree failed high, meaning that
             // it caused a beta cut-off.
-            self.transposition_table[tt_key] = Some(TTEntry {
-                zobrist_hash: self.board.zobrist_hash,
-                depth,
-                value,
-                flag: TTFlag::Lowerbound,
-                best_move,
-                valid: true,
-            });
+            if matches!(existing_tt_entry_flag, TTFlag::Upperbound) || (matches!(existing_tt_entry_flag, TTFlag::Lowerbound) && depth >= existing_tt_entry_depth) {
+                self.transposition_table[tt_key] = Some(TTEntry {
+                    zobrist_hash: self.board.zobrist_hash,
+                    depth,
+                    value,
+                    flag: TTFlag::Lowerbound,
+                    best_move,
+                    valid: true,
+                });
+            }
 
         } else {
 
             // The best move in this subtree is between alpha and beta,
             // meaning it is an exact value
-            self.transposition_table[tt_key] = Some(TTEntry {
-                zobrist_hash: self.board.zobrist_hash,
-                depth,
-                value,
-                flag: TTFlag::Exact,
-                best_move,
-                valid: true,
-            });
+            if matches!(existing_tt_entry_flag, TTFlag::Upperbound) || matches!(existing_tt_entry_flag, TTFlag::Lowerbound) || (matches!(existing_tt_entry_flag, TTFlag::Exact) && depth >= existing_tt_entry_depth) {
+                self.transposition_table[tt_key] = Some(TTEntry {
+                    zobrist_hash: self.board.zobrist_hash,
+                    depth,
+                    value,
+                    flag: TTFlag::Exact,
+                    best_move,
+                    valid: true,
+                });
+            }
 
         }
 
