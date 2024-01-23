@@ -149,7 +149,8 @@ pub fn get_file_attacks_bb(occ: u64, square: usize, portion: i32) -> u64 {
 // Generate all psuedo-legal moves for a given color.
 // A psuedo-legal move is an otherwise legal move that has not yet been
 // checked to determine if it leaves the player's king in check.
-pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color: usize) -> Vec<ChessMove> {
+// If "captures_only" is true, then we'll only generate capture moves.
+pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color: usize, captures_only: bool) -> Vec<ChessMove> {
     
     // Keep track of capture moves and quiet moves seperately
     let mut capture_moves = Vec::new();
@@ -173,33 +174,45 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
             let mut is_en_passant = false;
 
             // Get quiet (i.e., non-capture) and capture move bitboards for the piece
-            let quite_move_bb;
+            let mut quite_move_bb = 0;
             let capture_move_bb;
             if piece == pieces::PAWN {
-                quite_move_bb = get_pawn_push_targets_bb(my_color, board.bb_empty_squares, square);
+                if !captures_only {
+                    quite_move_bb = get_pawn_push_targets_bb(my_color, board.bb_empty_squares, square);
+                }
                 if bitboard::BB_PAWN_ATTACKS[my_color][square] & en_passant_bb != 0 {
                     is_en_passant = true;
                 }
                 capture_move_bb = bitboard::BB_PAWN_ATTACKS[my_color][square] & (board.bb_side[opp_color] | en_passant_bb);
             } else if piece == pieces::KNIGHT {
-                quite_move_bb = bitboard::BB_KNIGHT_ATTACKS[square] & board.bb_empty_squares;
+                if !captures_only {
+                    quite_move_bb = bitboard::BB_KNIGHT_ATTACKS[square] & board.bb_empty_squares;
+                }
                 capture_move_bb = bitboard::BB_KNIGHT_ATTACKS[square] & board.bb_side[opp_color];
             } else if piece == pieces::BISHOP {
                 let bishop_attacks = get_diagonal_attacks_bb(board.bb_occupied_squares, square, 0) | get_antidiagonal_attacks_bb(board.bb_occupied_squares, square, 0);
-                quite_move_bb = bishop_attacks & board.bb_empty_squares;
+                if !captures_only {
+                    quite_move_bb = bishop_attacks & board.bb_empty_squares;
+                }
                 capture_move_bb = bishop_attacks & board.bb_side[opp_color];
             } else if piece == pieces::ROOK {
                 let rook_attacks = get_rank_attacks_bb(board.bb_occupied_squares, square, 0) | get_file_attacks_bb(board.bb_occupied_squares, square, 0);
-                quite_move_bb = rook_attacks & board.bb_empty_squares;
+                if !captures_only {
+                    quite_move_bb = rook_attacks & board.bb_empty_squares;
+                }
                 capture_move_bb = rook_attacks & board.bb_side[opp_color];
             } else if piece == pieces::QUEEN {
                 let bishop_attacks = get_diagonal_attacks_bb(board.bb_occupied_squares, square, 0) | get_antidiagonal_attacks_bb(board.bb_occupied_squares, square, 0);
                 let rook_attacks = get_rank_attacks_bb(board.bb_occupied_squares, square, 0) | get_file_attacks_bb(board.bb_occupied_squares, square, 0);
                 let queen_attacks = bishop_attacks | rook_attacks;
-                quite_move_bb = queen_attacks & board.bb_empty_squares;
+                if !captures_only {
+                    quite_move_bb = queen_attacks & board.bb_empty_squares;
+                }
                 capture_move_bb = queen_attacks & board.bb_side[opp_color];
             } else if piece == pieces::KING {
-                quite_move_bb = (bitboard::BB_KING_ATTACKS[square] & board.bb_empty_squares) | get_castling_king_targets_bb(board, my_color, board.bb_occupied_squares);
+                if !captures_only {
+                    quite_move_bb = (bitboard::BB_KING_ATTACKS[square] & board.bb_empty_squares) | get_castling_king_targets_bb(board, my_color, board.bb_occupied_squares);
+                }
                 capture_move_bb = bitboard::BB_KING_ATTACKS[square] & board.bb_side[opp_color];
             } else {
                 println!("Invalid piece selection in generate_all_psuedo_legal_moves");
@@ -207,16 +220,18 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
             }
 
             // First get non-capture moves
-            for m in bitboard::occupied_squares(quite_move_bb) {
-                let cmove = ChessMove {
-                    start_square: square,
-                    end_square: m,
-                    piece,
-                    captured_piece: None,
-                    priority: 0,
-                    is_en_passant: false,
-                };
-                quiet_moves.push(cmove);
+            if !captures_only {
+                for m in bitboard::occupied_squares(quite_move_bb) {
+                    let cmove = ChessMove {
+                        start_square: square,
+                        end_square: m,
+                        piece,
+                        captured_piece: None,
+                        priority: 0,
+                        is_en_passant: false,
+                    };
+                    quiet_moves.push(cmove);
+                }
             }
 
             // Next get capture moves
@@ -239,7 +254,9 @@ pub fn generate_all_psuedo_legal_moves(board: &chess_board::ChessBoard, my_color
 
     // Order capture moves first (by appending quiet moves to the end)
     // This will get re-sorted anyway, but may make the re-sort faster.
-    capture_moves.append(&mut quiet_moves);
+    if !captures_only {
+        capture_moves.append(&mut quiet_moves);
+    }
     capture_moves
 
 }
@@ -388,7 +405,7 @@ mod tests {
         }
         let mut move_count = 0;
         let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
-        let mut moves = generate_all_psuedo_legal_moves(&board, my_color);
+        let mut moves = generate_all_psuedo_legal_moves(&board, my_color, false);
         retain_only_legal_moves(board, &mut moves);
         for m in moves.iter() {
             board.make_move(m.start_square, m.end_square, None);
@@ -418,7 +435,7 @@ mod tests {
         board.new_game();
         board.make_move(12, 28, None); // e4
         board.make_move(51, 35, None); // d5
-        let mut moves = generate_all_psuedo_legal_moves(&board, pieces::COLOR_WHITE);
+        let mut moves = generate_all_psuedo_legal_moves(&board, pieces::COLOR_WHITE, false);
         retain_only_legal_moves(&mut board, &mut moves);
         let mut captures = 0;
         for m in moves.iter() {

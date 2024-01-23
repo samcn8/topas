@@ -111,11 +111,11 @@ Since this is just a personal hobby project, I'm not currently accepting pull re
 
 ## Acknowledgments
 
-Throughout the course of this project, I read a lot of information related to searching, evaluation, and other chess-related algorithms.  A few of the key resources that helped me understand core concepts the most were:
+Throughout the course of this project, I read a lot of information related to searching, evaluation, and other chess-related algorithms.  A few of the key resources that helped me the most were:
  * The Chess Programming Wiki: https://www.chessprogramming.org/Main_Page
  * Wikipedia (which has great pseudo-code examples): https://www.wikipedia.org
  * The Mediocre Chess blog: http://mediocrechess.blogspot.com
  * Stockfish: https://github.com/official-stockfish/Stockfish
  * Snakefish (particularly the excellent explanation of Kindergarten bitboards): https://github.com/cglouch/snakefish
  * Piece square tables and piece values are from https://www.chessprogramming.org/PeSTO%27s_Evaluation_Function, which credits Ronald Friedrich's RofChade engine and specifically this forum thread: http://www.talkchess.com/forum3/viewtopic.php?f=2&t=68311&start=19.
-
+ * The Rustic chess engine book / documentation: https://rustic-chess.org

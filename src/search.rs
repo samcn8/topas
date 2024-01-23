@@ -701,13 +701,11 @@ impl SearchEngine {
         
     }
 
-    // This sorts moves, in place, with the highest priority moves first.
+    // This scores moves, assigning a priority (higher is better)
     // Priority from high to low is: (1) PV moves, (2) moves that cause
     // a beta cut-off, (3) captures, sorted by MVV-LVA, (4) killer moves,
-    // and (5) all other moves.  Note that if ply is not provided, then
-    // the caller is indicating they don't want to use killer moves in
-    // sorting -- this happens in quiesce search where only captures matter.
-    fn sort_moves(&self, moves: &mut Vec<movegen::ChessMove>, ply: Option<u8>) {
+    // and (5) all other moves.
+    fn score_moves(&self, moves: &mut Vec<movegen::ChessMove>, ply: u8) {
 
         // Assign a priority to all moves
         for m in moves.iter_mut() {
@@ -721,9 +719,9 @@ impl SearchEngine {
                     priority = PROMOTION_PRIORITY_BONUS;
                 } else if let Some(cap) = m.captured_piece {
                     priority = CAPTURE_PRIORITY_BONUS + pieces::MVV_LVA[cap][m.piece];
-                } else if let Some(ply_val) = ply {
+                } else {
                     let cur_move = Some((m.start_square as u8, m.end_square as u8));
-                    if cur_move == self.primary_killers[ply_val as usize] || cur_move == self.secondary_killers[ply_val as usize] {
+                    if cur_move == self.primary_killers[ply as usize] || cur_move == self.secondary_killers[ply as usize] {
                         priority = KILLER_MOVE_BONUS;
                     }
                 }
@@ -739,8 +737,24 @@ impl SearchEngine {
 
         }
 
-        // Sort moves by priority
-        moves.sort_unstable_by(|a, b| b.priority.cmp(&a.priority));
+    }
+
+    // Place the ith highest priority move in the ith slot.
+    // Values in positions less than i have already been sorted / used so
+    // we only have to check moves at and to the right of i.
+    fn sort_move_with_priority(&self, moves: &mut Vec<movegen::ChessMove>, i: usize) {
+        let mut highest_value = moves[i].priority;
+        let mut highest_index = i;
+        for index in (i+1)..moves.len() {
+            let p = moves[index].priority;
+            if p > highest_value {
+                highest_value = p;
+                highest_index = index;
+            }
+        }
+        if highest_index != i {
+            moves.swap(i, highest_index);
+        }
     }
 
     // This is an implementation of the quiescence search, which allows
@@ -800,30 +814,26 @@ impl SearchEngine {
         // Generate all legal moves.  Note that we will only search
         // capture moves.
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
-        let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color);
+        let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color, true);
         movegen::retain_only_legal_moves(&mut self.board, &mut moves);
-        self.sort_moves(&mut moves, None);
 
-        // Check for checkmate and stalemate
-        if moves.len() == 0 {
-            if movegen::is_king_in_check(&self.board, my_color) {
-                // The other player wins by checkmate
-                return -CHECKMATE_VALUE;
-            } else {
-                // Stalemate
-                return DRAW_VALUE;
+        // Assign priorities according to MVV-LVA
+        for m in moves.iter_mut() {
+            if m.captured_piece.is_none() {
+                println!("ERROR: Non-capture selected in q search");
+                continue;
             }
+            m.priority = pieces::MVV_LVA[m.captured_piece.unwrap()][m.piece];
         }
 
         // Recursively search the capture moves
-        for m in moves.iter() {
+        for i in 0..moves.len() {
 
-            // Filter out non-captures
-            if m.captured_piece.is_none() {
-                continue;
-            }
+            // Grab the next highest priority move
+            self.sort_move_with_priority(&mut moves, i);
+            let m = &moves[i];
 
-            // At this point, we consider this an analyzed move
+            // Update analyzed moves
             self.moves_analyzed += 1;
 
             // Perform static exchange evaluation on this capture
@@ -928,11 +938,8 @@ impl SearchEngine {
 
         // Generate all legal moves to search
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
-        let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color);
+        let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color, false);
         movegen::retain_only_legal_moves(&mut self.board, &mut moves);
-
-        // Sort the moves
-        self.sort_moves(&mut moves, Some(ply));
 
         // Check for checkmate and stalemate
         if moves.len() == 0 {
@@ -945,10 +952,18 @@ impl SearchEngine {
             }
         }
 
+        // Score the moves
+        self.score_moves(&mut moves, ply);
+
         // Recursively search the moves
         let mut best_move = None;
         let mut value = -INF;
-        for (idx, m) in moves.iter().enumerate() {
+        let mut pvs_active = false;
+        for i in 0..moves.len() {
+
+            // Grab the next highest priority move
+            self.sort_move_with_priority(&mut moves, i);
+            let m = &moves[i];
 
             // Make the move
             self.board.make_move(m.start_square, m.end_square, None);
@@ -963,7 +978,7 @@ impl SearchEngine {
             // previously guess PV mode, and hence have to research with the
             // full window.
             let mut score_for_move;
-            if idx == 0 {
+            if !pvs_active {
                 // Search the first (and likely best) with the full window
                 score_for_move = -self.negamax(depth - 1, -beta, -alpha, false);
             } else {
@@ -1002,6 +1017,11 @@ impl SearchEngine {
                 }
 
                 break;
+            }
+
+            // Check to see if we've raised alpha, and if so we can start PVS
+            if score_for_move > alpha {
+                pvs_active = true;
             }
 
         }
