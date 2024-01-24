@@ -815,7 +815,6 @@ impl SearchEngine {
         // capture moves.
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color, true);
-        movegen::retain_only_legal_moves(&mut self.board, &mut moves);
 
         // Assign priorities according to MVV-LVA
         for m in moves.iter_mut() {
@@ -832,6 +831,11 @@ impl SearchEngine {
             // Grab the next highest priority move
             self.sort_move_with_priority(&mut moves, i);
             let m = &moves[i];
+
+            // Check to make sure it's legal
+            if !movegen::is_legal_move(&mut self.board, m) {
+                continue;
+            }
 
             // Update analyzed moves
             self.moves_analyzed += 1;
@@ -939,18 +943,6 @@ impl SearchEngine {
         // Generate all legal moves to search
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color, false);
-        movegen::retain_only_legal_moves(&mut self.board, &mut moves);
-
-        // Check for checkmate and stalemate
-        if moves.len() == 0 {
-            if movegen::is_king_in_check(&self.board, my_color) {
-                // The other player wins by checkmate
-                return -CHECKMATE_VALUE;
-            } else {
-                // Stalemate
-                return DRAW_VALUE;
-            }
-        }
 
         // Score the moves
         self.score_moves(&mut moves, ply);
@@ -959,11 +951,18 @@ impl SearchEngine {
         let mut best_move = None;
         let mut value = -INF;
         let mut pvs_active = false;
+        let mut legal_move_available = false;
         for i in 0..moves.len() {
 
             // Grab the next highest priority move
             self.sort_move_with_priority(&mut moves, i);
             let m = &moves[i];
+
+            // Check to make sure it's legal
+            if !movegen::is_legal_move(&mut self.board, m) {
+                continue;
+            }
+            legal_move_available = true;
 
             // Make the move
             self.board.make_move(m.start_square, m.end_square, None);
@@ -1024,6 +1023,17 @@ impl SearchEngine {
                 break;
             }
 
+        }
+
+        // Check for checkmate and stalemate
+        if !legal_move_available {
+            if movegen::is_king_in_check(&self.board, my_color) {
+                // The other player wins by checkmate
+                return -CHECKMATE_VALUE;
+            } else {
+                // Stalemate
+                return DRAW_VALUE;
+            }
         }
 
         // Sanity check

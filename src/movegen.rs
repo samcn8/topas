@@ -270,30 +270,25 @@ pub fn is_king_in_check(board: &chess_board::ChessBoard, king_color: usize) -> b
     is_square_attacked_by_side(&board, king_square, 1 - king_color)
 }
 
-// Modify the passed in moves vector to keep only moves that don't leave the
-// player's king in check.
-pub fn retain_only_legal_moves(board: &mut chess_board::ChessBoard, moves: &mut Vec<ChessMove>) {
+// Checks if a psuedo-legal move is legal.  It is legal if the king is
+// not left in check (and, if castling, the initial king square and "through"
+// square are not under attack).
+pub fn is_legal_move(board: &mut chess_board::ChessBoard, m: &ChessMove) -> bool {
     let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
-    moves.retain(|i| {
-
-        // If this is a castling move, ensure the king is not in check
-        // and the square the king is moving through is not attacked.
-        if i.piece == pieces::KING && i.start_square.abs_diff(i.end_square) == 2 {
-            let opp_color = 1 - my_color;
-            let through_square = if i.start_square > i.end_square {i.start_square - 1} else {i.start_square + 1};
-            if is_king_in_check(board, my_color) || is_square_attacked_by_side(board, through_square, opp_color){
-                return false;
-            }
+    // If this is a castling move, ensure the king is not in check
+    // and the square the king is moving through is not attacked.
+    if m.piece == pieces::KING && m.start_square.abs_diff(m.end_square) == 2 {
+        let opp_color = 1 - my_color;
+        let through_square = if m.start_square > m.end_square {m.start_square - 1} else {m.start_square + 1};
+        if is_king_in_check(board, my_color) || is_square_attacked_by_side(board, through_square, opp_color){
+            return false;
         }
-
-        // Ensure the king is not in check after the move is made
-        board.make_move(i.start_square, i.end_square, None);
-        let keepit = !is_king_in_check(board, my_color);
-        board.unmake_move();
-        keepit
-
-    });
-
+    }
+    // Ensure the king is not in check after the move is made
+    board.make_move(m.start_square, m.end_square, None);
+    let keepit = !is_king_in_check(board, my_color);
+    board.unmake_move();
+    keepit
 }
 
 // Get any pawn push moves for a color from a starting location.
@@ -405,9 +400,11 @@ mod tests {
         }
         let mut move_count = 0;
         let my_color = if board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
-        let mut moves = generate_all_psuedo_legal_moves(&board, my_color, false);
-        retain_only_legal_moves(board, &mut moves);
+        let moves = generate_all_psuedo_legal_moves(&board, my_color, false);
         for m in moves.iter() {
+            if !is_legal_move(board, m) {
+                continue;
+            }
             board.make_move(m.start_square, m.end_square, None);
             move_count += get_number_of_valid_moves(board, depth - 1);
             board.unmake_move();
@@ -435,10 +432,12 @@ mod tests {
         board.new_game();
         board.make_move(12, 28, None); // e4
         board.make_move(51, 35, None); // d5
-        let mut moves = generate_all_psuedo_legal_moves(&board, pieces::COLOR_WHITE, false);
-        retain_only_legal_moves(&mut board, &mut moves);
+        let moves = generate_all_psuedo_legal_moves(&board, pieces::COLOR_WHITE, false);
         let mut captures = 0;
         for m in moves.iter() {
+            if !is_legal_move(&mut board, m) {
+                continue;
+            }
             if m.captured_piece.is_some() {
                 captures += 1;
             }
