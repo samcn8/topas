@@ -64,26 +64,28 @@ Here is an example of Topas searching, at depth 8, for the best move from the st
 
 ```
 $ ./topas
-Topas 1.3.0 by Sam Nelson
+Topas <version> by Sam Nelson
 > uci
-id name Topas 1.3.0
+id name Topas <version>
 id author Sam Nelson
 option name Hash type spin default 16 min 1 max 131072
 uciok
-> setoption name Hash value 1000
+> setoption name Hash value 4000
 > ucinewgame
 > isready
 readyok
 > position startpos
-> go depth 8
-info depth 1 score cp 8 nodes 21 time 0 pv g1f3 
-info depth 2 score cp 28 nodes 79 time 0 pv g1f3 g8f6 
-info depth 3 score cp 7 nodes 708 time 2 pv g1f3 g8f6 d2d4 
-info depth 4 score cp 28 nodes 1697 time 8 pv g1f3 g8f6 d2d4 d7d5 
-info depth 5 score cp 5 nodes 14934 time 48 pv g1f3 g8f6 d2d4 d7d5 b1c3 
-info depth 6 score cp 28 nodes 54147 time 219 pv g1f3 g8f6 d2d4 d7d5 b1c3 b8c6 
-info depth 7 score cp 3 nodes 353349 time 1209 pv g1f3 g8f6 e2e3 d7d5 c2c4 c8e6 c4d5 
-info depth 8 score cp 34 nodes 1534560 time 6191 pv e2e4 d7d5 e4d5 g8f6 d2d4 f6d5 c2c4 d5b4 
+> go depth 10
+info depth 1 score cp 8 nodes 24 time 0 pv g1f3 
+info depth 2 score cp 28 nodes 81 time 0 pv g1f3 g8f6 
+info depth 3 score cp 7 nodes 625 time 2 pv g1f3 g8f6 d2d4 
+info depth 4 score cp 28 nodes 816 time 3 pv g1f3 g8f6 d2d4 d7d5 
+info depth 5 score cp 5 nodes 6733 time 24 pv g1f3 g8f6 d2d4 d7d5 b1c3 
+info depth 6 score cp 28 nodes 8553 time 26 pv g1f3 g8f6 d2d4 d7d5 b1c3 b8c6 
+info depth 7 score cp 4 nodes 69470 time 194 pv g1f3 g8f6 c2c4 c7c5 b1c3 b8c6 e2e4 
+info depth 8 score cp 12 nodes 91691 time 246 pv g1f3 g8f6 c2c4 e7e6 d2d4 c7c5 c1e3 c5d4 
+info depth 9 score cp 19 nodes 570977 time 1542 pv e2e4 d7d5 e4d5 g8f6 b1c3 f6d5 f1b5 c8d7 b5d7 
+info depth 10 score cp 25 nodes 957588 time 2570 pv e2e4 e7e5 g1f3 b8c6 f1d3 c6b4 d3e2 d7d5 e4d5 d8d5 
 bestmove e2e4 
 ```
 
