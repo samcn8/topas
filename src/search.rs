@@ -811,7 +811,7 @@ impl SearchEngine {
             alpha = stand_pat;
         }
 
-        // Generate all legal moves.  Note that we will only search
+        // Generate all moves.  Note that we will only search
         // capture moves.
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color, true);
@@ -937,7 +937,7 @@ impl SearchEngine {
         // Compute ply, which will be used to store killer moves
         let ply = self.max_depth_for_search - depth + 1;
 
-        // Generate all legal moves to search
+        // Generate all moves to search
         let my_color = if self.board.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let mut moves = movegen::generate_all_psuedo_legal_moves(&self.board, my_color, false);
 
@@ -947,8 +947,7 @@ impl SearchEngine {
         // Recursively search the moves
         let mut best_move = None;
         let mut value = -INF;
-        let mut pvs_active = false;
-        let mut legal_move_available = false;
+        let mut legal_moves_searched = 0;
         for i in 0..moves.len() {
 
             // Grab the next highest priority move
@@ -959,31 +958,44 @@ impl SearchEngine {
             if !movegen::is_legal_move(&mut self.board, m) {
                 continue;
             }
-            legal_move_available = true;
 
             // Make the move
             self.board.make_move(m.start_square, m.end_square, None);
 
-            // Recursively search on the new board state.
-            // Note that we're going to perform a Principal Variation Search,
-            // we were only fully search the first move with the hope that
-            // that was the best move (which is reasonable in an iterative
-            // deepening framework).  Other moves we search with a null window
-            // to test whether they raise alpha (likely not).  However, if
-            // they do then that means we've found a better move that the
-            // previously guess PV mode, and hence have to research with the
-            // full window.
+             // Recursively search on the new board state.
             let mut score_for_move;
-            if !pvs_active {
-                // Search the first (and likely best) with the full window
-                score_for_move = -self.negamax(depth - 1, -beta, -alpha, false);
-            } else {
-                // Search likely worse moves with a null window
-                score_for_move = -self.negamax(depth - 1, -alpha - 1, -alpha, false);
+            if legal_moves_searched >= 1 {
+
+                // This is not the first (and probably best) move, so search
+                // with reduced depth and/or window
+                let promotion = m.piece == pieces::PAWN && (m.end_square / 8 == 0 || m.end_square / 8 == 7);
+                if legal_moves_searched > 3 && depth >= 3 && !promotion && m.captured_piece.is_none() && !movegen::is_king_in_check(&self.board, my_color) && !movegen::is_king_in_check(&self.board, 1 - my_color) {
+                    
+                    // Late move reductions (LMR) - this is a late move (and
+                    // so probably not great) and the move is not particularly
+                    // tactical in nature, so search with a null window and
+                    // decreased depth.
+                    score_for_move = -self.negamax(depth - 2, -alpha - 1, -alpha, false);
+
+                } else {
+
+                    // Principal variation search (PVS) - this is not the
+                    // first move (which is the PV move in our iterative
+                    // deepening framework) and so assume that this is not
+                    // the best.  Verify this assumption by performing a
+                    // null window search.
+                    score_for_move = -self.negamax(depth - 1, -alpha - 1, -alpha, false);
+
+                }
+
+                // Check if our assumption that we wouldn't get a better move
+                // held.  If not, re-search at full depth and window.
                 if alpha < score_for_move && score_for_move < beta {
-                    // A better move was found; re-search with full window
                     score_for_move = -self.negamax(depth - 1, -beta, -alpha, false);
                 }
+
+            } else {
+                score_for_move = -self.negamax(depth - 1, -beta, -alpha, false);
             }
 
             // Update best move
@@ -995,10 +1007,7 @@ impl SearchEngine {
             // Unmake the move
             self.board.unmake_move();
 
-            // Check to see if we've raised alpha, and if so we can start PVS
-            if score_for_move > alpha {
-                pvs_active = true;
-            }
+            legal_moves_searched += 1;
 
             // Check for a beta cut-off
             alpha = cmp::max(alpha, value);
@@ -1023,7 +1032,7 @@ impl SearchEngine {
         }
 
         // Check for checkmate and stalemate
-        if !legal_move_available {
+        if legal_moves_searched == 0 {
             if movegen::is_king_in_check(&self.board, my_color) {
                 // The other player wins by checkmate
                 return -CHECKMATE_VALUE;
