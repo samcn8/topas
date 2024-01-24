@@ -876,7 +876,7 @@ impl SearchEngine {
     // pruning and is the core of the engine's search routine.  This uses
     // transposition table lookups to enhance performance.
     // See https://en.wikipedia.org/wiki/Negamax
-    fn negamax(&mut self, depth: u8, mut alpha: i32, mut beta: i32, root: bool) -> i32 {
+    fn negamax(&mut self, depth: u8, mut alpha: i32, beta: i32, root: bool) -> i32 {
         
         // Before doing any searching, check to make sure we're not
         // halting.  For performance reasons, we won't check this
@@ -914,11 +914,8 @@ impl SearchEngine {
             if tt_entry.valid && tt_entry.zobrist_hash == self.board.zobrist_hash && tt_entry.depth >= depth {
                 match tt_entry.flag {
                     TTFlag::Exact => return tt_entry.value,
-                    TTFlag::Lowerbound => alpha = cmp::max(alpha, tt_entry.value),
-                    TTFlag::Upperbound => beta = cmp::min(beta, tt_entry.value),
-                }
-                if alpha >= beta {
-                    return tt_entry.value;
+                    TTFlag::Lowerbound => if tt_entry.value >= beta {return tt_entry.value;},
+                    TTFlag::Upperbound => if tt_entry.value <= alpha {return tt_entry.value;},
                 }
             }
         }
