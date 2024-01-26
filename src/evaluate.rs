@@ -11,9 +11,8 @@ use crate::pieces;
 // Bonuses and penalities, in centipawns, for various situations
 const TEMPO_BONUS: i32 = 28;
 const BISHOP_PAIR_BONUS: i32 = 25;
-const ISOLATED_PAWN_PENALTY: i32 = 50;
-const DOUBLE_PAWN_PENALTY: i32 = 50;
-const NO_CASTLING_RIGHTS_PENALTY: i32 = 50;
+const ISOLATED_PAWN_PENALTY: i32 = 25;
+const DOUBLE_PAWN_PENALTY: i32 = 30;
 
 // Check if the current Zobrist hash has been repeated twice before.
 // Note the hash will only be the same if its the same player's turn,
@@ -150,14 +149,6 @@ pub fn static_evaluation_phase(board: &chess_board::ChessBoard, is_end_game: boo
                 totals[color] += (16 * row) as i32;
             }
         }
-    }
-
-    // Lack of castling rights penalty
-    if !board.white_castled && !board.white_ks_castling_rights && !board.white_qs_castling_rights {
-        totals[pieces::COLOR_WHITE] -= NO_CASTLING_RIGHTS_PENALTY;
-    }
-    if !board.black_castled && !board.black_ks_castling_rights && !board.black_qs_castling_rights {
-        totals[pieces::COLOR_BLACK] -= NO_CASTLING_RIGHTS_PENALTY;
     }
 
     // Return evaluation from the current player's perspective

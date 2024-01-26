@@ -17,6 +17,7 @@ The following features are implemented:
  * Move ordering based on principal variation, cut nodes, capture moves sorted via MVV-LVA (Most Valuable Victim, Least Valuable Attacker), and killer moves
  * Quiescence search with delta pruning and static exchange evaluation (SEE) to mitigate the horizon effect
  * Tapered static evaluation based on piece values, piece-square tables (PST), and game state
+ * Late move reductions to reduce the search space
 
 Topas is named after one of my children's hermit crabs.  Topas (the hermit crab) escaped in the house one day and we spent quite a few hours searching for her (successfully).  Hopefully Topas (the chess engine) will search as diligently as we did, although perhaps a bit quicker.
 
@@ -121,3 +122,4 @@ Throughout the course of this project, I read a lot of information related to se
  * Snakefish (particularly the excellent explanation of Kindergarten bitboards): https://github.com/cglouch/snakefish
  * Piece square tables and piece values are from https://www.chessprogramming.org/PeSTO%27s_Evaluation_Function, which credits Ronald Friedrich's RofChade engine and specifically this forum thread: http://www.talkchess.com/forum3/viewtopic.php?f=2&t=68311&start=19.
  * The Rustic chess engine book / documentation: https://rustic-chess.org
+ * The Cute Chess CLI, used for automated game testing: https://cutechess.com

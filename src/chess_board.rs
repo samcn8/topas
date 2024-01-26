@@ -53,8 +53,6 @@ struct MoveRecord {
     prior_white_qs_castling_rights: bool,
     prior_black_ks_castling_rights: bool,
     prior_black_qs_castling_rights: bool,
-    prior_white_castled: bool,
-    prior_black_castled: bool,
     prior_en_passant_rights: Option<usize>,
 }
 
@@ -90,10 +88,6 @@ pub struct ChessBoard {
     pub black_ks_castling_rights: bool,
     pub black_qs_castling_rights: bool,
 
-    // Whether white / black has castled before
-    pub white_castled: bool,
-    pub black_castled: bool,
-
     // If not None, this indicates the active en passant square.
     // This is the square the opposing pawn just moved through on a two step
     // move, if the current player can capture en passant to that square.
@@ -120,8 +114,6 @@ impl ChessBoard {
             white_qs_castling_rights: true,
             black_ks_castling_rights: true,
             black_qs_castling_rights: true,
-            white_castled: false,
-            black_castled: false,
             en_passant_rights: None,
             zobrist_hasher: zobrist::ZobristHasher::new(),
             zobrist_hash: 0,
@@ -230,11 +222,6 @@ impl ChessBoard {
         // Reset the rest of the state
         self.move_history.clear();
         self.zobrist_history.clear();
-        // TODO: We don't have enough information to determine whether
-        // castling has occured.  This is currently only used in the
-        // evaluation factor; consider an alternate evaluation approach.
-        self.white_castled = false;
-        self.black_castled = false;
 
         // Reset the Zobrist hash
         self.zobrist_hash = self.zobrist_hasher.full_hash(self);
@@ -301,8 +288,6 @@ impl ChessBoard {
             prior_white_qs_castling_rights: self.white_qs_castling_rights,
             prior_black_ks_castling_rights: self.black_ks_castling_rights,
             prior_black_qs_castling_rights: self.black_qs_castling_rights,
-            prior_white_castled: self.white_castled,
-            prior_black_castled: self.black_castled,
             prior_en_passant_rights: self.en_passant_rights,
         };
         self.move_history.push(move_record);
@@ -406,7 +391,6 @@ impl ChessBoard {
                 self.bb_side[my_color] ^= bitboard::BB_WKS_CASTLING_ROOKS_FROM_TO;
                 self.bb_occupied_squares ^= bitboard::BB_WKS_CASTLING_ROOKS_FROM_TO;
                 self.bb_empty_squares ^= bitboard::BB_WKS_CASTLING_ROOKS_FROM_TO;
-                self.white_castled = true;
                 // Hash - apply rook to new square and revert it from old square
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[7][my_color][pieces::ROOK];
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[5][my_color][pieces::ROOK];
@@ -418,7 +402,6 @@ impl ChessBoard {
                 // Hash - apply rook to new square and revert it from old square
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[0][my_color][pieces::ROOK];
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[3][my_color][pieces::ROOK];
-                self.white_castled = true;
             } else if start_square == 60 && end_square == 62 {
                 self.bb_pieces[my_color][pieces::ROOK] ^= bitboard::BB_BKS_CASTLING_ROOKS_FROM_TO;
                 self.bb_side[my_color] ^= bitboard::BB_BKS_CASTLING_ROOKS_FROM_TO;
@@ -427,7 +410,6 @@ impl ChessBoard {
                 // Hash - apply rook to new square and revert it from old square
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[63][my_color][pieces::ROOK];
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[61][my_color][pieces::ROOK];
-                self.black_castled = true;
             } else if start_square == 60 && end_square == 58 {
                 self.bb_pieces[my_color][pieces::ROOK] ^= bitboard::BB_BQS_CASTLING_ROOKS_FROM_TO;
                 self.bb_side[my_color] ^= bitboard::BB_BQS_CASTLING_ROOKS_FROM_TO;
@@ -436,7 +418,6 @@ impl ChessBoard {
                 // Hash - apply rook to new square and revert it from old square
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[56][my_color][pieces::ROOK];
                 self.zobrist_hash ^= self.zobrist_hasher.hash_piece[59][my_color][pieces::ROOK];
-                self.black_castled = true;
             }
         }
 
@@ -534,10 +515,6 @@ impl ChessBoard {
         // Get colors
         let my_color = if self.whites_turn {pieces::COLOR_WHITE} else {pieces::COLOR_BLACK};
         let opp_color = if self.whites_turn {pieces::COLOR_BLACK} else {pieces::COLOR_WHITE};
-
-        // Restore castling saved state
-        self.white_castled = last_move.prior_white_castled;
-        self.black_castled = last_move.prior_black_castled;
 
         // Restore en passant rights if they changed
         if last_move.prior_en_passant_rights != self.en_passant_rights {
@@ -720,8 +697,6 @@ impl ChessBoard {
         println!("   white_qs_castling_rights: {}", self.white_qs_castling_rights);
         println!("   black_ks_castling_rights: {}", self.black_ks_castling_rights);
         println!("   black_qs_castling_rights: {}", self.black_qs_castling_rights);
-        println!("   white_castled: {}", self.white_castled);
-        println!("   black_castled: {}", self.black_castled);
         println!("   en_passant_rights: {:?}", self.en_passant_rights);
         println!("   zobrist_hash: {}", self.zobrist_hash);
         println!("-------------- END DEBUG STATE ----------------");
