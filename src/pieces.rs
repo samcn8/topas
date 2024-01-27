@@ -16,6 +16,8 @@ pub const COLOR_BLACK: usize = 1;
 // Piece and color IDs to characters
 pub const PIECE_ID_TO_CHAR: [[char; 6]; 2] = [['P', 'N', 'B', 'R', 'Q', 'K'],
                                               ['p', 'n', 'b', 'r', 'q', 'k']];
+pub const PIECE_ID_TO_CHAR_UNICODE: [[char; 6]; 2] = [['\u{2659}', '\u{2658}', '\u{2657}', '\u{2656}', '\u{2655}', '\u{2654}'],
+                                                      ['\u{265F}', '\u{265E}', '\u{265D}', '\u{265C}', '\u{265B}', '\u{265A}']];
 
 // Constants for centipawn value of pieces (indexes using
 // the piece constants listed above)

@@ -6,7 +6,7 @@ Topas is an open source UCI chess engine written in Rust with a focus on clean, 
 
 Topas is a "from scratch" implementation I created as a hobby project with the goal of learning more about chess algorithms and Rust programming in general.
 
-Note that Topas is a command line program and does not contain a GUI; the only way to interact with it is via the Universal Chess Interface (UCI) protocol.  It is recommended that users use their favorite UCI-speaking chess GUI to play against Topas.
+Note that Topas is a command line program and does not contain a GUI; it is meant to be interacted with via the Universal Chess Interface (UCI) protocol.  It is recommended that users use their favorite UCI-speaking chess GUI to play against Topas.
 
 The following features are implemented:
  * Universal Chess Interface (UCI) support, described below
@@ -89,6 +89,8 @@ info depth 9 score cp 19 nodes 570977 time 1542 pv e2e4 d7d5 e4d5 g8f6 b1c3 f6d5
 info depth 10 score cp 25 nodes 957588 time 2570 pv e2e4 e7e5 g1f3 b8c6 f1d3 c6b4 d3e2 d7d5 e4d5 d8d5 
 bestmove e2e4 
 ```
+
+Note that there is a built-in debugging terminal that allows users to play a (limited and not overly user-friendly) game against Topas in the terminal.  To access this type `terminal` and follow the on-screen prompts.  When in terminal mode, Topas will not respond to UCI commands.  Once terminal mode is exited, Topas will once again respond to UCI commands.
 
 ## Building
 

@@ -659,7 +659,7 @@ impl ChessBoard {
 
     // Print the board
     #[allow(dead_code)]
-    pub fn print(&self) {
+    pub fn print(&self, use_unicode: bool) {
         let mut char_board = [['.'; 8]; 8];
         let mut index = 0;
         for (color, _) in self.bb_pieces.iter().enumerate() {
@@ -670,17 +670,25 @@ impl ChessBoard {
                         None => panic!("Error in bitboard representation"),
                     };
                     if c == '1' {
-                        char_board[(7 - index / 8) as usize][(index % 8) as usize] = pieces::PIECE_ID_TO_CHAR[color][piece];
+                        if use_unicode {
+                            char_board[(7 - index / 8) as usize][(index % 8) as usize] = pieces::PIECE_ID_TO_CHAR_UNICODE[color][piece];
+                        } else {
+                            char_board[(7 - index / 8) as usize][(index % 8) as usize] = pieces::PIECE_ID_TO_CHAR[color][piece];
+                        }
                     }
                     index += 1;
                 }
                 index = 0;
             }
         }
-        for cs in char_board {
-            let str: String = cs.iter().collect();
-            println!("   {}", str);
+        for (rank, cs) in char_board.iter().enumerate() {
+            print!("{}  ", 8 - rank);
+            for cell in cs {
+                print!("{} ", cell);
+            }
+            println!();
         }
+        println!("   a b c d e f g h");
     }
 
     // Print the game state, for debugging purposes
@@ -688,7 +696,7 @@ impl ChessBoard {
     pub fn print_debug(&self) {
         println!("----------------- DEBUG STATE -----------------");
         println!("BOARD STATE");
-        self.print();
+        self.print(false);
         println!("OTHER STATE");
         println!("   move_history: {:?}", self.move_history);
         println!("   zobrist_history: {:?}", self.zobrist_history);

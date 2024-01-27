@@ -7,6 +7,7 @@
 // See https://en.wikipedia.org/wiki/Universal_Chess_Interface
 
 use std::io;
+use std::io::Write;
 use std::thread;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
@@ -14,6 +15,8 @@ use crate::search;
 use crate::pieces;
 use crate::chess_board;
 use crate::uci;
+use crate::movegen;
+use crate::evaluate;
 
 pub struct UCI {
     
@@ -89,6 +92,7 @@ impl UCI {
                 match tokens[0] {
                     "uci" => uci::uci_command(),
                     "isready" => uci::isready_command(),
+                    "terminal" => uci::play_terminal(),
                     "quit" => break,
                     _ => self.tx.send(uci_command).unwrap(),
                 }
@@ -260,4 +264,233 @@ pub fn go_command(engine: &mut search::SearchEngine, tokens: &Vec<&str>) {
 // engine thread.
 pub fn print_board(engine: &mut search::SearchEngine) {
     engine.print_board();
+}
+
+// Play a terminal game
+pub fn play_terminal() {
+
+    // Create a new engine and board
+    let (_, rx): (Sender<String>, Receiver<String>) = mpsc::channel();
+    let mut engine = search::SearchEngine::new(rx);
+    engine.new_game();
+    let mut board = chess_board::ChessBoard::new();
+
+    // Get initial input
+    let mut use_unicode = false;
+    let human_color;
+    let mut time_per_move = 5000;
+    println!();
+    println!("===================================");
+    println!("Welcome to the Topas Chess Terminal");
+    println!("===================================");
+    println!();
+    println!("Note: For a more feature-rich user experience, consider using a UCI-based chess GUI.");
+    println!();
+    println!("Default options are: ");
+    println!("   - Unicode support: no");
+    println!("   - Topas hash table size: 2GB");
+    println!("   - Topas time per move: 5 seconds");
+    let use_defaults;
+    loop {
+        print!("Do you want to continue with these defaults ('yes' to continue, 'no' to edit): ");
+        io::stdout().flush().unwrap();
+        match get_user_input().as_str() {
+            "yes" | "y" => {use_defaults = true; break},
+            "no" | "n" => {use_defaults = false; break},
+            _ => println!(" -> Invalid input, please enter 'yes' or 'no'."),
+        }
+    }
+    if !use_defaults {
+        loop {
+            print!("Does your terminal support unicode characters (yes/no) (enter yes if unsure)? ");
+            io::stdout().flush().unwrap();
+            match get_user_input().as_str() {
+                "yes" | "y" => {use_unicode = true; break},
+                "no" | "n" => {use_unicode = false; break},
+                _ => println!(" -> Invalid input, please enter 'yes' or 'no'."),
+            }
+        }
+        loop {
+            print!("Enter the hash table size (in MB from 1 to 131072) that Topas is allowed to use (enter 2000 if unsure): ");
+            io::stdout().flush().unwrap();
+            let input = get_user_input();
+            if let Ok(i) = input.parse::<u32>() {
+                if i >= 1 && i <= 131072 {
+                    engine.set_tt_size_mb(i as u64);
+                    break;
+                }
+            }
+            println!(" -> Invalid input, please enter an integer between 1 and 131072.");
+        }
+        loop {
+            print!("Enter the number of milliseconds per move that Topas is allowed (enter 5000 if unsure): ");
+            io::stdout().flush().unwrap();
+            let input = get_user_input();
+            if let Ok(i) = input.parse::<u32>() {
+                if i >= 1 && i <= 1000000 {
+                    time_per_move = i;
+                    break;
+                }
+            }
+            println!(" -> Invalid input, please enter an integer between 1 and 1000.");
+        }
+    }
+    loop {
+        print!("Would you like to play as white or black? ");
+        io::stdout().flush().unwrap();
+        match get_user_input().as_str() {
+            "white" | "w" => {human_color = pieces::COLOR_WHITE; break},
+            "black" | "b" => {human_color = pieces::COLOR_BLACK; break},
+            _ => println!(" -> Invalid input, please enter 'white' or 'black'."),
+        }
+    }
+    loop {
+        println!();
+        println!("You're all set!  Note that all moves must be entered in UCI-style long");
+        println!("algebraic notation.  This means 4 characters (2 for start square, 2 for");
+        println!("end square).  For instance e2e4 moves the pawn two spaces.  If you make");
+        println!("a promotion move, then a 5th character should be added representing the");
+        println!("new piece in lowercase.  For instance, b7b8q promotes a black pawn to a");
+        print!("queen.  Got it (yes/no)? ");
+        io::stdout().flush().unwrap();
+        match get_user_input().as_str() {
+            "yes" | "y" => break,
+            _ => println!(" -> See https://en.wikipedia.org/wiki/Algebraic_notation_(chess)"),
+        }
+    }
+
+    // Play the game
+    let mut move_string = String::new();
+    board.new_game();
+    let mut turn = pieces::COLOR_WHITE;
+    loop {
+        let mut cur_move;
+        let mut move_raw;
+        println!();
+        if human_color == pieces::COLOR_BLACK {
+            println!("Black: You");
+        } else {
+            println!("Black: Topas");
+        }
+        board.print(use_unicode);
+        if human_color == pieces::COLOR_WHITE {
+            println!("White: You");
+        } else {
+            println!("White: Topas");
+        }
+        println!();
+        if turn == human_color {
+            loop {
+
+                // Get move from user
+                print!("Your turn - enter move in long algebraic notation (type quit to quit): ");
+                io::stdout().flush().unwrap();
+                move_raw = get_user_input();
+                if move_raw == "quit" {
+                    println!("You are leaving the Topas Chess Terminal and switching back into UCI mode.");
+                    println!("Enter quit again to exit the program; else enter any other UCI command.");
+                    return;
+                }
+                if !valid_move_entry(&move_raw) {
+                    println!(" -> Invalid move input");
+                    continue;
+                }
+                cur_move = movegen::convert_moves_str_into_list(&move_raw);
+                let cur_piece = board.get_color_and_piece_on_square(cur_move[0].0);
+                if cur_piece.is_none() {
+                    println!(" -> Invalid move, no piece on selected square");
+                    continue;
+                }
+                let mut cap_piece = None;
+                if let Some(e) = board.get_color_and_piece_on_square(cur_move[0].1) {
+                    cap_piece = Some(e.1);
+                }
+                let start_file = cur_move[0].0 % 8;
+                let end_file = cur_move[0].1 % 8;
+                let mut is_en_passant = false;
+                if cur_piece.unwrap().1 == pieces::PAWN && (start_file != end_file) {
+                    is_en_passant = true;
+                }
+                let cur_move_struct = movegen::ChessMove {
+                    start_square: cur_move[0].0,
+                    end_square: cur_move[0].1,
+                    piece: cur_piece.unwrap().1,
+                    captured_piece: cap_piece,
+                    priority: 0,
+                    is_en_passant,
+                };
+
+                // Validate move
+                if !movegen::generate_all_psuedo_legal_moves(&board, turn, false).contains(&cur_move_struct) || !movegen::is_legal_move(&mut board, &cur_move_struct) {
+                    println!(" -> Illegal move");
+                    continue;
+                }
+                break;
+            }
+        } else {
+
+            // Get best move from engine
+            println!("Topas is now thinking...");
+            engine.set_board_state(chess_board::STARTFEN, &move_string);
+            move_raw = engine.find_best_move(99, time_per_move as i32, 0, 1);
+            cur_move = movegen::convert_moves_str_into_list(&move_raw);
+
+        }
+        
+        // Make the move and switch turns
+        board.make_move(cur_move[0].0, cur_move[0].1, Some(pieces::QUEEN));
+        move_string.push_str(&move_raw);
+        move_string.push_str(" ");
+        turn = 1 - turn;
+
+        // Check for game end state
+        let mut all_moves = movegen::generate_all_psuedo_legal_moves(&board, turn, false);
+        all_moves.retain(|x| movegen::is_legal_move(&mut board, &x));
+        if all_moves.len() == 0 {
+            if movegen::is_king_in_check(&board, turn) {
+                println!("Game over: {} wins by checkmate", if turn == pieces::COLOR_WHITE {"Black"} else {"White"});
+            } else {
+                println!("Game over: Draw by stalemate");
+            }
+            break;
+        }
+        if evaluate::is_draw_by_insufficient_material(&board) {
+            println!("Game over: Draw by insufficient material");
+            break;
+        }
+        if evaluate::is_draw_by_threefold_repitition(&board) {
+            println!("Game over: Draw by threefold repitition");
+            break;
+        }
+    }
+
+    // Exit terminal
+    println!();
+    println!("You are leaving the Topas Chess Terminal and switching back into UCI mode.");
+    println!("Enter quit again to exit the program; else enter any other UCI command.");
+
+}
+
+// Validate move string
+fn valid_move_entry(m: &str) -> bool {
+    if m.len() < 4 || m.len() > 5 {
+        return false;
+    }
+    if !m.chars().nth(1).unwrap().is_digit(10) || !m.chars().nth(3).unwrap().is_digit(10) {
+        return false;
+    }
+    if !"abcdefgh".contains(m.chars().nth(0).unwrap()) || !"abcdefgh".contains(m.chars().nth(2).unwrap()) {
+        return false;
+    }
+    if m.len() == 5 && !"nbrq".contains(m.chars().nth(4).unwrap()) {
+        return false;
+    }
+    true
+}
+
+// Get user input
+fn get_user_input() -> String {
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).expect("Failed to read line");
+    input.trim().to_lowercase().to_string()
 }

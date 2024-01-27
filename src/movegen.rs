@@ -5,7 +5,7 @@ use crate::bitboard;
 use crate::chess_board;
 use crate::pieces;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub struct ChessMove {
     
     // Starting square of the piece being moved

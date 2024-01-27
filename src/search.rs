@@ -279,7 +279,7 @@ impl SearchEngine {
     // previous iteration is the first searched node in the next iteration.
     // This will print information to standard out in UCI format in compliance
     // with the UCI protocol.
-    pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32, moves_to_go: u16) {
+    pub fn find_best_move(&mut self, mut max_depth: u8, time_available: i32, time_inc: i32, moves_to_go: u16) -> String {
 
         // Sanity check on transposition tables.  Note that the user should
         // have sent a ucinewgame command first to reset the transposition
@@ -443,7 +443,7 @@ impl SearchEngine {
 
         // Per the UCI protocol, print the best move to standard out
         println!("bestmove {}", bm);
-
+        bm.trim().to_string()
     }
 
     // This returns a priority bonus for move ordering if the move is
