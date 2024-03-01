@@ -6,7 +6,7 @@ Topas is an open source UCI chess engine written in Rust with a focus on clean, 
 
 Topas is a "from scratch" implementation I created as a hobby project with the goal of learning more about chess algorithms and Rust programming in general.
 
-Note that Topas is a command line program and does not contain a GUI; it is meant to be interacted with via the Universal Chess Interface (UCI) protocol.  It is recommended that users use their favorite UCI-speaking chess GUI to play against Topas.
+Note that Topas is a command line program and does not contain a GUI; it is meant to be interacted with via the Universal Chess Interface (UCI) protocol.  It is recommended that users use their favorite UCI-speaking chess GUI to play against Topas.  I recommend using my custom chess GUI - [Coral](https://github.com/samcn8/coral).  The Stockfish Wiki also has a list of free GUIs [here](https://github.com/official-stockfish/Stockfish/wiki/Download-and-usage#download-a-chess-gui) (note that I have not tested all of these GUIs with Topas).
 
 The following features are implemented:
  * Universal Chess Interface (UCI) support, described below
