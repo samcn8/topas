@@ -19,7 +19,7 @@ The following features are implemented:
  * Tapered static evaluation based on piece values, piece-square tables (PST), and game state
  * Late move reductions to reduce the search space
 
-Topas is named after one of my children's hermit crabs.  Topas (the hermit crab) escaped in the house one day and we spent quite a few hours searching for her (successfully).  Hopefully Topas (the chess engine) will search as diligently as we did, although perhaps a bit quicker.
+Topas is named after one of my children's hermit crabs.  Topas (the hermit crab - with an "s" instead of a "z") escaped in the house one day and we spent quite a few hours searching for her (successfully).  Hopefully Topas (the chess engine) will search as diligently as we did, although perhaps a bit quicker.
 
 ## Universal Chess Interface (UCI) Support
 
