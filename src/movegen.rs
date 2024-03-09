@@ -30,6 +30,7 @@ pub struct ChessMove {
 
 // Converts a list of moves to long algebraic notation.  This notation is
 // used by the UCI protocol.
+// See https://en.wikipedia.org/wiki/Algebraic_notation_(chess)
 pub fn convert_move_list_to_lan(moves: &Vec<(u8, u8, Option<usize>)>) -> String {
     let mut lan_str = String::new();
     for m in moves.iter() {
@@ -291,7 +292,7 @@ pub fn is_legal_move(board: &mut chess_board::ChessBoard, m: &ChessMove) -> bool
     keepit
 }
 
-// Get any pawn push moves for a color from a starting location.
+// Get any pawn push moves for a color from a starting location
 fn get_pawn_push_targets_bb(color: usize, empty: u64, square: usize) -> u64 {
     let pawn_bb = bitboard::to_bb(square);
     let single_push_bb = if color == pieces::COLOR_WHITE {bitboard::north_one(pawn_bb) & empty} else {bitboard::south_one(pawn_bb) & empty};

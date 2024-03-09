@@ -305,6 +305,8 @@ impl SearchEngine {
             // add this chunk to half of our time increment.  If we're
             // running low on time, we try to ensure we have at least
             // 100ms for a move.
+            // Note that this follows the approach outlined here:
+            // http://mediocrechess.blogspot.com/2007/01/guide-time-management.html
             time_for_move = time_available / (moves_to_go as i32) + time_inc / 2;
             if time_for_move > time_available {
                 time_for_move = time_available - 500;
@@ -536,7 +538,7 @@ impl SearchEngine {
     // Perform static exchange evaluation (SEE) for a particular capture move.
     // To keep this as fast as possible, this will evaluate the capture exchanges
     // without checking if moves are legal (e.g., it will consider an illegal
-    // move that puts your king in check).  This will return a score for the capture.
+    // move that puts our king in check).  This will return a score for the capture.
     // Scores greater than or equal to 0 are worth searching further because they
     // could be winning captures.  Scores less than 0 are likely loosing captures
     // and hence less worthy of further search.
