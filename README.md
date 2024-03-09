@@ -6,6 +6,8 @@ Topas is an open source UCI chess engine written in Rust with a focus on clean, 
 
 Topas is a "from scratch" implementation I created as a hobby project with the goal of learning more about chess algorithms and Rust programming in general.
 
+Topas v1.3.3 has a CCRL Blitz rating which you can view [here](https://computerchess.org.uk/ccrl/404/).
+
 Note that Topas is a command line program and does not contain a GUI; it is meant to be interacted with via the Universal Chess Interface (UCI) protocol.  It is recommended that users use their favorite UCI-speaking chess GUI to play against Topas.  I recommend using my custom chess GUI - [Coral](https://github.com/samcn8/coral).  The Stockfish Wiki also has a list of free GUIs [here](https://github.com/official-stockfish/Stockfish/wiki/Download-and-usage#download-a-chess-gui) (note that I have not tested all of these GUIs with Topas).
 
 The following features are implemented:
@@ -61,7 +63,7 @@ UCI dictates the use of standard input and standard output to communicate with t
  * `quit`: Quits the program as soon as possible.
  * `print` (custom, non-UCI message): Tells the engine to print the state of the board to the screen.
 
-Here is an example of Topas searching, at depth 8, for the best move from the starting position (added `>` characters to indicate user input for clarity):
+Here is an example of Topas searching, at depth 10, for the best move from the starting position (added `>` characters to indicate user input for clarity):
 
 ```
 $ ./topas
