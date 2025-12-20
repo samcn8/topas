@@ -408,8 +408,9 @@ pub fn play_terminal() {
                 let start_file = cur_move[0].0 % 8;
                 let end_file = cur_move[0].1 % 8;
                 let mut is_en_passant = false;
-                if cur_piece.unwrap().1 == pieces::PAWN && (start_file != end_file) {
+                if cur_piece.unwrap().1 == pieces::PAWN && start_file != end_file && cap_piece.is_none() {
                     is_en_passant = true;
+                    cap_piece = Some(pieces::PAWN);
                 }
                 let cur_move_struct = movegen::ChessMove {
                     start_square: cur_move[0].0,
@@ -464,8 +465,22 @@ pub fn play_terminal() {
         }
     }
 
-    // Exit terminal
+    // Print final board state
     println!();
+    if human_color == pieces::COLOR_BLACK {
+        println!("Black: You");
+    } else {
+        println!("Black: Topas");
+    }
+    board.print(use_unicode);
+    if human_color == pieces::COLOR_WHITE {
+        println!("White: You");
+    } else {
+        println!("White: Topas");
+    }
+    println!();
+
+    // Exit terminal
     println!("You are leaving the Topas Chess Terminal and switching back into UCI mode.");
     println!("Enter quit again to exit the program; else enter any other UCI command.");
 
